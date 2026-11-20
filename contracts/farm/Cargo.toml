@@ -1,0 +1,13 @@
+[package]
+name = "farm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Lock and type script of a farm cell"
+
+[dependencies]
+farm-core = { path = "../../crates/farm-core" }
+# Without the default `libc` feature ckb-std compiles no C code, so the build
+# needs no RISC-V C compiler.
+ckb-std = { version = "1.1", default-features = false, features = ["allocator", "ckb-types", "dummy-atomic", "type-id"] }
+ckb-hash = { version = "1.1", default-features = false, features = ["ckb-contract"] }

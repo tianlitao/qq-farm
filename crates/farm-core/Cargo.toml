@@ -1,0 +1,8 @@
+[package]
+name = "farm-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Game rules of the on-chain farm: state layout and the state transition function. Shared by the CKB script, the tests and the web client (as WASM)."
+
+[dependencies]

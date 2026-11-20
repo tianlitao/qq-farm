@@ -1,0 +1,10 @@
+[package]
+name = "farm-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Rule tests and ckb-testtool tests of the farm script"
+
+[dependencies]
+farm-core = { path = "../crates/farm-core" }
+ckb-testtool = "1.1"

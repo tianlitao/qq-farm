@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["crates/farm-core", "crates/farm-wasm", "tests"]
+# The on-chain script is built for riscv64 from its own workspace.
+exclude = ["contracts"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.test]
+opt-level = 1

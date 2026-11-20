@@ -1,0 +1,12 @@
+[package]
+name = "farm-wasm"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "farm-core for the browser: the web client runs the same rules as the chain"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+farm-core = { path = "../farm-core" }

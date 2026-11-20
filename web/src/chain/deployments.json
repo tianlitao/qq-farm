@@ -1,0 +1,8 @@
+{
+  "devnet": {
+    "txHash": "0x44c562ffaf2ed9209310b7c634c8c82f13dbbd19a5d55cc4affaefe24a5d89a5",
+    "index": 0,
+    "codeHash": "0xe80a23f18da7ca31fee294ef8784ff3077daa3546f9d36ec7ed57c5ef9566320",
+    "unit": 30
+  }
+}
