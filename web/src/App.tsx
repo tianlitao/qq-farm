@@ -28,7 +28,7 @@ function describe(move: Move, game: Game): string {
   const whose =
     move.farm === game.mine?.id
       ? ""
-      : `${game.look(game.farms.find((f) => f.id === move.farm), false)?.name || t("unnamedFarm")}：`;
+      : `${game.look(game.farms.find((f) => f.id === move.farm), false)?.name || t("unnamedFarm")}${t("whoSep")}`;
   switch (a.op) {
     case "buy":
       return t("dBuy", { crop: cropName(a.crop), count: a.count });
@@ -45,7 +45,7 @@ function describe(move: Move, game: Game): string {
     case "feedDog":
       return t("dFeedDog");
     case "clear":
-      return `${at}${t(KIND_VERB[a.kind] ?? "")}`;
+      return t("dClear", { plot: at, verb: t(KIND_VERB[a.kind] ?? "") });
     case "rename":
       return t("dRename", { name: a.name });
     case "help":
@@ -504,7 +504,7 @@ function Claim({ game }: { game: Game }) {
               {t("faucetLink")}
             </a>
           ) : (
-            t("tryAnother")
+            t("noFaucet")
           )}
           {game.address && <code>{game.address}</code>}
         </p>
@@ -801,6 +801,12 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
           <code>{game.address}</code>
         </p>
         <p>{t("rulesClose")}</p>
+        <p>
+          {t("rulesAudit")}{" "}
+          <a href="https://github.com/tianlitao/qq-farm/blob/main/AUDIT.md" target="_blank" rel="noreferrer">
+            {t("rulesAuditLink")}
+          </a>
+        </p>
         <button className="btn small danger" disabled={!!game.busy} onClick={askClose}>
           {t("closeBtn")}
         </button>

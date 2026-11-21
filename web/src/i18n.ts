@@ -105,6 +105,7 @@ const zh: Record<string, string> = {
   poor: "这个账户的 CKB 不够。",
   faucetLink: "去水龙头领取测试币",
   tryAnother: "换一个测试账户试试。",
+  noFaucet: "这个网络没有水龙头，请自备 CKB。",
 
   rename: "改名",
   visiting: "{level} 级，你在这里做客",
@@ -157,6 +158,7 @@ const zh: Record<string, string> = {
   verbWeed: "除草",
   verbPest: "除虫",
   verbWater: "浇水",
+  dClear: "{plot}{verb}",
   dBuy: "买{crop}种子 ×{count}",
   dPlant: "{plot}种{crop}",
   dHarvest: "收获{plot}",
@@ -169,6 +171,7 @@ const zh: Record<string, string> = {
   dMischiefWeed: "{who}往{plot}放草",
   dMischiefPest: "{who}往{plot}放虫",
   dSteal: "{who}摘{plot}",
+  whoSep: "：",
 
   seedsNote: "选一种拿在手里，点空地就种下。袋里没有会顺手买一颗。",
   growInfo: "{hours} 小时成熟，收 {yield} 个",
@@ -204,6 +207,9 @@ const zh: Record<string, string> = {
   rulesClose:
     "农场格子里押着的 CKB 始终是你的。收回农场会销毁这座农场连同里面的金币、作物和等级，把 CKB 退回钱包，无法撤销。",
   closeBtn: "收回农场，取回 CKB",
+  rulesAudit:
+    "已审计：qwen4-max（2026-11-21，三轮），源码审查 + CKB-VM 攻击探针 + 实链验证。当前仍有未修的高危问题（close 授权可被伪造），尚不具备上主网条件。模型审计，不等同第三方审计公司。",
+  rulesAuditLink: "查看审计报告",
 
   renameTitle: "给农场起个名字",
   renameBtn: "就叫这个",
@@ -323,6 +329,7 @@ const en: Record<string, string> = {
   poor: "This account does not have enough CKB. ",
   faucetLink: "Get testnet CKB from the faucet",
   tryAnother: "Try another test account.",
+  noFaucet: "this network has no faucet — bring your own CKB.",
 
   rename: "Rename",
   visiting: "level {level}, you are visiting",
@@ -423,6 +430,9 @@ const en: Record<string, string> = {
   rulesClose:
     "The CKB in the farm cell is always yours. Closing destroys the farm — gold, crops and levels — and returns the CKB to your wallet. It cannot be undone.",
   closeBtn: "Close the farm, take the CKB back",
+  rulesAudit:
+    "Audited by qwen4-max (2026-11-21, three rounds): source review, CKB-VM attack probes, and live-chain verification. A high-severity issue is still open (close authorization can be forged); not mainnet-ready. A model audit, not a third-party audit firm.",
+  rulesAuditLink: "Read the audit report",
 
   renameTitle: "Name your farm",
   renameBtn: "That's the name",
