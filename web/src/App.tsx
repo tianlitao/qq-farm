@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { Bug, Coin, CropIcon, CROP_NAMES, Dog, Drop, Plant, type Stage, Weed } from "./art/crops";
+import { SceneBackdrop } from "./art/scene";
 import type { Move } from "./chain/farm";
 import { type Catalog, type FarmView, KIND_DRY, KIND_PEST, KIND_WEED, type PlotView } from "./chain/rules";
 import { type Game, useGame } from "./game";
 
 type Drawer = "seeds" | "barn" | "neighbours" | "rules" | undefined;
+type Dialog = "rename" | "close" | undefined;
 type VisitTool = "hand" | "weed" | "pest";
 
 const KIND_VERB = ["除草", "除虫", "浇水"];
@@ -62,13 +64,24 @@ function stageOf(plot: PlotView, now: number): Stage {
 export function App() {
   const game = useGame();
   const [drawer, setDrawer] = useState<Drawer>();
+  const [dialog, setDialog] = useState<Dialog>();
   const [seed, setSeed] = useState(1);
   const [tool, setTool] = useState<VisitTool>("hand");
 
   if (game.phase.at === "loading") {
     return (
       <Shell game={game}>
-        <p className="notice">正在读取链上的田地…</p>
+        <div className="boot">
+          <div className="boot-art">
+            <Plant crop={6} stage="sprout" />
+          </div>
+          <p className="boot-text">正在读取链上的田地…</p>
+          <div className="boot-dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </div>
+        </div>
       </Shell>
     );
   }
@@ -76,9 +89,12 @@ export function App() {
     return (
       <Shell game={game}>
         <div className="card notice-card">
+          <div className="notice-art" aria-hidden="true">
+            <Plant crop={6} stage="withered" />
+          </div>
           <h2>{game.phase.why}</h2>
           {game.phase.hint && <p>{game.phase.hint}</p>}
-          <button className="btn" onClick={() => location.reload()}>
+          <button className="btn big" onClick={() => location.reload()}>
             重新连接
           </button>
         </div>
@@ -168,13 +184,7 @@ export function App() {
           ) : (
             <>
               <span className="sign-name">{mine.name || "我的农场"}</span>
-              <button
-                className="link"
-                onClick={() => {
-                  const name = prompt("给农场起个名字", mine.name)?.trim();
-                  if (name) game.add(me({ op: "rename", name }));
-                }}
-              >
+              <button className="link" onClick={() => setDialog("rename")}>
                 改名
               </button>
             </>
@@ -214,6 +224,9 @@ export function App() {
               onClick={() => game.add(me({ op: "expand" }))}
               disabled={mine.level < next.level || mine.gold < next.price}
             >
+              <span className="locked-flag" aria-hidden="true">
+                +
+              </span>
               <span className="locked-title">开垦这块地</span>
               <span className="locked-cost">
                 <Coin size={16} /> {num(next.price)}
@@ -266,8 +279,42 @@ export function App() {
               }}
             />
           )}
-          {drawer === "rules" && <Rules catalog={catalog} game={game} />}
+          {drawer === "rules" && <Rules catalog={catalog} game={game} askClose={() => setDialog("close")} />}
         </aside>
+      )}
+
+      {dialog === "rename" && (
+        <Modal title="给农场起个名字" onClose={() => setDialog(undefined)}>
+          <RenameForm
+            current={mine.name}
+            submit={(name) => {
+              game.add(me({ op: "rename", name }));
+              setDialog(undefined);
+            }}
+          />
+        </Modal>
+      )}
+      {dialog === "close" && (
+        <Modal title="收回农场？" onClose={() => setDialog(undefined)}>
+          <p className="modal-text">
+            金币、作物和等级都会随之消失，只有格子里的 CKB 回到钱包，这一步无法撤销。
+          </p>
+          <div className="modal-actions">
+            <button className="btn" onClick={() => setDialog(undefined)}>
+              再想想
+            </button>
+            <button
+              className="btn danger"
+              disabled={!!game.busy}
+              onClick={() => {
+                game.close();
+                setDialog(undefined);
+              }}
+            >
+              确认收回
+            </button>
+          </div>
+        </Modal>
       )}
     </Shell>
   );
@@ -277,8 +324,21 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
   const ckb = game.balance === undefined ? "…" : num(Math.floor(Number(game.balance / 100_000_000n)));
   return (
     <div className="app">
+      <SceneBackdrop />
       <header className="hud">
         <div className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 48 48" width="30" height="30">
+              <rect width="48" height="48" rx="12" fill="#7db249" stroke="#22331f" strokeWidth="3" />
+              <path
+                d="M24 40V22M24 26c-9 1-14-4-15-11 8-1 14 3 15 11zM24 26c9 1 14-4 15-11-8-1-14 3-15 11z"
+                fill="#fffdf4"
+                stroke="#22331f"
+                strokeWidth="2.4"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
           <span className="brand-name">垄上</span>
           <span className="brand-sub">{game.network.name}上的农场</span>
         </div>
@@ -332,10 +392,53 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
   );
 }
 
+function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div
+      className="modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <div className="modal">
+        <button className="drawer-close" onClick={onClose} aria-label="关闭">
+          ×
+        </button>
+        <h2>{title}</h2>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function RenameForm({ current, submit }: { current: string; submit: (name: string) => void }) {
+  const [name, setName] = useState(current);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const clean = name.trim();
+        if (clean) submit(clean);
+      }}
+    >
+      <input className="modal-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={18} autoFocus />
+      <div className="modal-actions">
+        <button className="btn big" disabled={!name.trim()}>
+          就叫这个
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function Claim({ game }: { game: Game }) {
   const [name, setName] = useState("");
   const poor = game.balance !== undefined && game.balance < 400n * 100_000_000n;
   const noWallet = game.accounts.length === 0 && !game.wallet.connected;
+  const catalog = game.catalog;
   return (
     <form
       className="card claim"
@@ -348,9 +451,23 @@ function Claim({ game }: { game: Game }) {
         <Plant crop={6} stage="ripe" />
       </div>
       <h1>开垦一块自己的地</h1>
-      <p>
-        农场是一个存在 CKB 链上的格子，占用约 332 CKB，随时可以由你收回。六块地、{num(game.catalog?.initGold ?? 500)} 金币起步，之后的每一次播种、收获和串门都由链上合约按同一套规则验算。
-      </p>
+      <p>农场是一个存在 CKB 链上的格子，之后的每一次播种、收获和串门都由链上合约按同一套规则验算。</p>
+      {catalog && (
+        <ul className="claim-facts">
+          <li>
+            <b>≈332 CKB</b>
+            <span>占地押金，随时收回</span>
+          </li>
+          <li>
+            <b>{num(catalog.initGold)} 金币</b>
+            <span>开垦即得的种子钱</span>
+          </li>
+          <li>
+            <b>{catalog.initPlots} 块地</b>
+            <span>攒经验可开垦到 {catalog.maxPlots} 块</span>
+          </li>
+        </ul>
+      )}
       <label className="field-label" htmlFor="farm-name">
         农场的名字
       </label>
@@ -422,7 +539,16 @@ function Kennel({ farm, game, away, catalog, onFeed }: { farm: FarmView; game: G
   const can = farm.level >= catalog.dogLevel;
   return (
     <div className="kennel">
-      <Dog awake={awake} size={58} />
+      <span className={`doghouse ${awake ? "awake" : ""}`} aria-hidden="true">
+        <svg viewBox="0 0 84 78" width="72" height="67">
+          <path d="M8 34L42 6l34 28" fill="#e2533f" stroke="#22331f" strokeWidth="3" strokeLinejoin="round" />
+          <rect x="14" y="32" width="56" height="40" rx="4" fill="#e8c38d" stroke="#22331f" strokeWidth="3" />
+          <path d="M30 72V52c0-7 5-12 12-12s12 5 12 12v20" fill="#6e4424" stroke="#22331f" strokeWidth="3" />
+        </svg>
+        <span className="doghouse-dog">
+          <Dog awake={awake} size={46} />
+        </span>
+      </span>
       <div className="kennel-text">
         <b>{awake ? `看门狗站岗中，还有 ${span(farm.dogUntil - game.now)}` : "看门狗饿着，不看门"}</b>
         <span>
@@ -600,7 +726,7 @@ function Neighbours({ game, go }: { game: Game; go: (id: string) => void }) {
   );
 }
 
-function Rules({ catalog, game }: { catalog: Catalog; game: Game }) {
+function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askClose: () => void }) {
   const unit = game.chain!.unit;
   const d = game.chain!.deployment;
   return (
@@ -624,16 +750,8 @@ function Rules({ catalog, game }: { catalog: Catalog; game: Game }) {
           我的地址
           <code>{game.address}</code>
         </p>
-        <p>
-          农场格子里押着的 CKB 始终是你的。收回农场会销毁这座农场连同里面的金币、作物和等级，把 CKB 退回钱包，无法撤销。
-        </p>
-        <button
-          className="btn small danger"
-          disabled={!!game.busy}
-          onClick={() => {
-            if (confirm("收回农场？金币、作物和等级都会消失，只有 CKB 回到钱包。")) game.close();
-          }}
-        >
+        <p>农场格子里押着的 CKB 始终是你的。收回农场会销毁这座农场连同里面的金币、作物和等级，把 CKB 退回钱包，无法撤销。</p>
+        <button className="btn small danger" disabled={!!game.busy} onClick={askClose}>
           收回农场，取回 CKB
         </button>
       </div>

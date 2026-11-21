@@ -4,5 +4,15 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react()],
   server: { port: 5183, strictPort: true },
-  build: { target: "es2022" },
+  build: {
+    target: "es2022",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom"],
+          ccc: ["@ckb-ccc/ccc", "@ckb-ccc/connector-react"],
+        },
+      },
+    },
+  },
 });

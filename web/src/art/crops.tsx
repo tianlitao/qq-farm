@@ -224,6 +224,7 @@ export function Plant({ crop, stage }: { crop: number; stage: Stage }) {
         <>
           <ellipse cx="48" cy="100" rx="17" ry="7" fill="#6e4424" {...o} />
           <path d="M48 96c0-5 2-8 6-9" fill="none" stroke={LEAF} strokeWidth={3} strokeLinecap="round" />
+          {leaf("M54 87c3-4 8-5 11-3-2 4-6 5-11 3z")}
         </>
       )}
       {stage === "sprout" && (
@@ -239,15 +240,20 @@ export function Plant({ crop, stage }: { crop: number; stage: Stage }) {
       {stage === "ripe" &&
         (ROOTS.has(crop) ? (
           <>
-            <g transform="translate(14 44) scale(1.42)">{FRUIT[crop]}</g>
+            <g transform="translate(48 100)">
+              {leaf("M0 0C-20 -6 -30 -20 -30 -44 -12 -40 -2 -24 0 0z")}
+              {leaf("M0 0C20 -6 30 -20 30 -44 12 -40 2 -24 0 0z", LEAF_DARK)}
+              {leaf("M0 0C-4 -18 0 -30 8 -44 14 -28 10 -12 0 0z", "#82c957")}
+            </g>
+            <g transform="translate(14 42) scale(1.5)">{FRUIT[crop]}</g>
             <path d="M22 104c8-5 44-5 52 0" fill="none" stroke="#6e4424" strokeWidth={7} strokeLinecap="round" />
           </>
         ) : (
           <>
             <Bush />
-            <g transform="translate(9 30) scale(0.78)">{FRUIT[crop]}</g>
-            <g transform="translate(50 22) scale(0.82)">{FRUIT[crop]}</g>
-            <g transform="translate(29 52) scale(0.86)">{FRUIT[crop]}</g>
+            <g transform="translate(4 24) scale(0.9)">{FRUIT[crop]}</g>
+            <g transform="translate(48 14) scale(0.95)">{FRUIT[crop]}</g>
+            <g transform="translate(24 46) scale(0.98)">{FRUIT[crop]}</g>
           </>
         ))}
       {stage === "withered" && (
@@ -266,12 +272,12 @@ function Bush() {
     <>
       <path d="M28 104q20-9 40 0" fill="#6e4424" stroke={INK} strokeWidth={2.6} />
       <path d="M48 104V62" fill="none" {...o} stroke={LEAF_DARK} strokeWidth={5} />
-      {leaf("M48 96c-19 4-33-4-36-20 16-4 30 5 36 20z")}
-      {leaf("M48 96c19 4 33-4 36-20-16-4-30 5-36 20z", LEAF_DARK)}
-      {leaf("M48 80c-17 0-28-12-28-27 15 0 26 11 28 27z", LEAF_DARK)}
-      {leaf("M48 80c17 0 28-12 28-27-15 0-26 11-28 27z")}
-      {leaf("M48 58c-9-9-10-22 0-33 10 11 9 24 0 33z", "#82c957")}
-      <path d="M32 74c6-3 11-3 16 1M52 62c5-4 10-4 15-1" fill="none" stroke="#d8f0a7" strokeWidth={2.4} strokeLinecap="round" opacity="0.7" />
+      {leaf("M48 98c-22 5-38-4-41-22 18-5 34 6 41 22z", LEAF_DARK)}
+      {leaf("M48 98c22 5 38-4 41-22-18-5-34 6-41 22z")}
+      {leaf("M48 82c-19 1-31-11-31-28 17-1 29 11 31 28z")}
+      {leaf("M48 82c19 1 31-11 31-28-17-1-29 11-31 28z", LEAF_DARK)}
+      {leaf("M48 58c-10-10-11-24 0-36 11 12 10 26 0 36z", "#82c957")}
+      <path d="M30 72c6-3 12-3 17 1M52 58c5-4 11-4 16-1M44 90c5-2 9-2 13 0" fill="none" stroke="#d8f0a7" strokeWidth={2.4} strokeLinecap="round" opacity={0.7} />
     </>
   );
 }
@@ -314,6 +320,7 @@ export function Coin({ size = 20 }: { size?: number }) {
     <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
       <circle cx="12" cy="12" r="10" fill="#f6c445" stroke={INK} strokeWidth={2} />
       <circle cx="12" cy="12" r="6" fill="none" stroke="#c7922a" strokeWidth={1.6} />
+      <path d="M6.6 9.4C7 7.6 8.4 6.2 10 5.6" fill="none" stroke="#fbe28a" strokeWidth={1.8} strokeLinecap="round" />
     </svg>
   );
 }

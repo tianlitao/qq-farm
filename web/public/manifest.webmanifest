@@ -1,0 +1,18 @@
+{
+  "name": "垄上 · CKB 链上农场",
+  "short_name": "垄上",
+  "description": "一块存在 CKB 链上的农田：播种、收获、串门，全部由链上合约验算。",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#b7dde6",
+  "theme_color": "#4e8a34",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
