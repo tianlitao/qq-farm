@@ -21,6 +21,7 @@
   --display: "ZCOOL KuaiLe", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --text: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
   --dock: 88px;
+  --horizon: 24%;
 }
 
 * {
@@ -86,7 +87,14 @@ h2 {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, var(--sky-top) 0%, #cfe8da 22%, var(--sky-mid) 30%, var(--grass) 30.3%, #68a03c 100%);
+  background: linear-gradient(
+    180deg,
+    var(--sky-top) 0%,
+    #cfe8da calc(var(--horizon) - 8%),
+    var(--sky-mid) var(--horizon),
+    var(--grass) calc(var(--horizon) + 0.3%),
+    #68a03c 100%
+  );
 }
 
 .backdrop {
@@ -95,14 +103,19 @@ h2 {
   overflow: hidden;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, var(--sky-top) 0%, #c9e5dc 20%, var(--sky-mid) 30%);
+  background: linear-gradient(
+    180deg,
+    var(--sky-top) 0%,
+    #c9e5dc calc(var(--horizon) - 6%),
+    var(--sky-mid) var(--horizon)
+  );
 }
 
 .sun-svg {
   position: absolute;
-  top: 5%;
-  right: 7%;
-  width: clamp(120px, 13vw, 185px);
+  top: 2%;
+  right: 22%;
+  width: clamp(110px, 11vw, 160px);
   animation: sun-breathe 7s ease-in-out infinite alternate;
 }
 
@@ -176,14 +189,176 @@ h2 {
   }
 }
 
-.terrain-svg {
+/* hills sit just above the horizon; on very wide screens the slice crop
+   only trims their tops, never moving the horizon itself */
+.hills-svg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% - var(--horizon) + 2px);
+  width: 100%;
+  height: 16%;
+  display: block;
+}
+
+/* the meadow: plain CSS, so it fills below the horizon on any aspect ratio */
+.meadow {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  width: 100%;
-  height: 100%;
+  top: var(--horizon);
+  border-radius: 100% 100% 0 0 / 26px 26px 0 0;
+  background-color: #7db249;
+  background-image:
+    radial-gradient(ellipse 90% 16% at 50% 0%, #9ed166 0 55%, rgba(158, 209, 102, 0) 62%),
+    var(--grass-tile),
+    linear-gradient(180deg, #8fc75e 0, #7db249 45%, #669e3b 100%);
+  background-size:
+    auto,
+    52px 38px,
+    auto;
+}
+
+/* horizon props: trees, fences, tufts and blooms are tied to the horizon
+   line by percentage, so their screen position never drifts */
+.prop {
+  position: absolute;
+}
+
+.prop svg {
   display: block;
+  width: 100%;
+  height: auto;
+}
+
+.tree-a,
+.tree-c,
+.tree-e {
+  left: 3%;
+  width: clamp(44px, 4.6vw, 66px);
+}
+
+.tree-b {
+  left: 7.5%;
+  width: clamp(38px, 3.9vw, 56px);
+}
+
+.tree-d {
+  left: 34%;
+  width: clamp(30px, 3vw, 44px);
+}
+
+.tree-e {
+  left: 66%;
+  width: clamp(30px, 3vw, 44px);
+}
+
+.tree-f {
+  right: 9%;
+  width: clamp(44px, 4.6vw, 66px);
+}
+
+.tree-g {
+  right: 4.5%;
+  width: clamp(38px, 3.9vw, 56px);
+}
+
+.tree-a,
+.tree-b,
+.tree-c,
+.tree-d,
+.tree-e,
+.tree-f,
+.tree-g {
+  top: var(--horizon);
+  transform: translateY(-92%);
+}
+
+.fence-a {
+  left: 2.5%;
+  top: calc(var(--horizon) + 4px);
+  width: clamp(180px, 18vw, 264px);
+}
+
+.fence-b {
+  right: 2.5%;
+  top: calc(var(--horizon) + 4px);
+  width: clamp(180px, 18vw, 264px);
+}
+
+.tuft-a {
+  left: 4.5%;
+  top: 31%;
+  width: 24px;
+}
+
+.tuft-b {
+  left: 95%;
+  top: 34%;
+  width: 24px;
+}
+
+.tuft-c {
+  left: 30%;
+  top: 88%;
+  width: 28px;
+}
+
+.tuft-d {
+  left: 68%;
+  top: 82%;
+  width: 24px;
+}
+
+.tuft-e {
+  left: 47%;
+  top: 60%;
+  width: 26px;
+}
+
+.tuft-f {
+  left: 12%;
+  top: 64%;
+  width: 22px;
+}
+
+.tuft {
+  width: 24px;
+}
+
+.bloom-a {
+  left: 20%;
+  top: 37%;
+  width: 17px;
+}
+
+.bloom-b {
+  left: 88%;
+  top: 41%;
+  width: 17px;
+}
+
+.bloom-c {
+  left: 53%;
+  top: 91%;
+  width: 16px;
+}
+
+.bloom-d {
+  left: 36%;
+  top: 71%;
+  width: 15px;
+}
+
+.bloom-e {
+  left: 79%;
+  top: 67%;
+  width: 18px;
+}
+
+.bloom {
+  width: 17px;
 }
 
 .butterfly {
@@ -1528,6 +1703,10 @@ button.row.on:hover:not(:disabled) {
 }
 
 @media (max-width: 640px) {
+  :root {
+    --horizon: 21%;
+  }
+
   .hud {
     grid-template-columns: 1fr auto;
     grid-template-areas:
