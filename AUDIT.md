@@ -30,13 +30,15 @@
 
 ## 发现
 
-### F1 · owner 认证不校验锁是否要求签名（中危，未修）
+### F1 · owner 认证不校验锁是否要求签名（中危，**已修复**，commit `1622cf2`）
 
 `contracts/farm/src/main.rs` 的 `owner_present` 只检查"交易输入里有没有 owner 的 lock hash"，而 `create()` 允许 owner 是任意 32 字节。若玩家用 **anyone-can-pay** 这类"任何人可花"的锁当农场主人，攻击者无需任何签名，把受害者的 ACP cell 塞进交易当输入（ACP 允许陌生人花它，只要容量不减），即可冒充主人：**关闭农场拿走约 332 CKB 押金**，或执行任意 owner 操作。
 
 - **实证**：`probe_acp_owner_robbed_via_close`（CKB-VM，always-success 锁模拟 ACP 的无签名可花性质），攻击交易验证通过，332 CKB 被拿走。
 - **现实暴露面**：CCC 默认推荐地址是 secp256k1 sighash / OmniLock，均需签名，默认钱包路径打不穿；测试网现存农场 owner 锁已逐一核对，均为需签名锁。但合约层面不阻止任何客户端用 ACP 地址建农场。
-- **修复建议**：`create()` 校验 owner lock 的 code_hash 白名单（secp256k1、OmniLock、JoyID 等已知需签名锁），或客户端硬性禁止此类地址并加负例测试。**上主网前必须处理。**
+- **修复（已上测试网）**：授权改为**方向校验**——`owner_net` 计算 owner 锁 cell 的容量净变化，owner 操作与开垦必须让 owner 侧净减少（付了手续费），关闭必须让 owner 侧净增加（押金流回 owner）。强签名锁行为不变；ACP 锁既不能被盗关闭、也不能被冒充执行 owner 操作（其"容量不可净减"的自有规则恰好无法伪装"净减"），创建时幽灵/赠送农场也被拒绝。
+- **优于白名单方案**：白名单只能挡"已知弱锁"，方向校验对任何"无签名可花且容量不减"的锁通用，且把 owner 操作冒充一并堵住。
+- **残留（如实披露）**：攻击者仍可**自掏押金**帮 ACP owner 关闭农场（把 332 CKB 赠回 owner，自己亏 332+手续费）——纯破坏、无收益、受害者无损资金。`probe_acp_owner_robbed_via_close` 已改为断言拒绝（回归测试）。
 
 ### F2 · 升级权集中，burn 是关服开关（信任模型，v2 引入，已如实披露）
 
