@@ -25,21 +25,47 @@ const deployment = readDeployments()[network];
 if (deployment?.version !== 2) {
   throw new Error(`no upgradable deployment on ${network}: run deploy first`);
 }
+const record = deployment;
 
 const client = createClient(network);
 const signer = new ccc.SignerCkbPrivateKey(client, key);
 const code = readFileSync(resolve(ROOT, "build/farm"));
 const nextDataHash = ccc.hashCkb(code);
+const validatorDataHash = ccc.hashCkb(readFileSync(resolve(ROOT, "build/type-id")));
 
-const current = await client.getCellLive(deployment.code, true);
-if (!current) throw new Error(`the code cell ${deployment.code.txHash} is gone; deploy anew`);
+// If a previous upgrade committed but died before updating the record, the
+// recorded outpoint is stale — recover the live code cell by its type script
+// hash (only one cell can carry it, the validator enforces that).
+async function findCodeCell(): Promise<{ cell: ccc.Cell; ref: { txHash: string; index: number } } | undefined> {
+  for await (const cell of client.findCellsOnChain(
+    { script: { codeHash: validatorDataHash, hashType: "data2", args: "0x" }, scriptType: "type", scriptSearchMode: "prefix", withData: false },
+    "asc",
+    100,
+  )) {
+    if (cell.cellOutput.type && ccc.hexFrom(cell.cellOutput.type.hash()) === record.codeScriptHash) {
+      return { cell, ref: { txHash: cell.outPoint.txHash, index: Number(cell.outPoint.index) } };
+    }
+  }
+  return undefined;
+}
+
+let codeRef = deployment.code;
+let current = await client.getCellLive(deployment.code, true);
+if (!current) {
+  const found = await findCodeCell();
+  if (!found) throw new Error(`the code cell is nowhere on chain; deploy anew`);
+  console.log(`the record was stale; the live code cell is ${found.ref.txHash}:${found.ref.index}`);
+  codeRef = found.ref;
+  current = found.cell;
+}
 const currentDataHash = ccc.hashCkb(current.outputData);
 if (currentDataHash === nextDataHash) {
-  console.log(`the code cell already runs this build (${nextDataHash}); nothing to do`);
+  writeDeployment(network, { ...deployment, code: codeRef, codeHash: nextDataHash });
+  console.log(`the code cell already runs this build (${nextDataHash}); record updated`);
   process.exit(0);
 }
 const liveScriptHash = current.cellOutput.type ? ccc.hexFrom(current.cellOutput.type.hash()) : undefined;
-if (liveScriptHash !== deployment.codeScriptHash) {
+if (liveScriptHash !== record.codeScriptHash) {
   throw new Error(`the live code cell's type script does not match the record; deploy anew`);
 }
 
@@ -52,7 +78,7 @@ const tx = ccc.Transaction.from({
 });
 tx.inputs.push(
   ccc.CellInput.from({
-    previousOutput: deployment.code,
+    previousOutput: codeRef,
     cellOutput: {
       capacity: current.cellOutput.capacity,
       lock: current.cellOutput.lock,

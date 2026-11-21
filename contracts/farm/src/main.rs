@@ -127,8 +127,27 @@ fn check_output_lock(me: &Script) -> Result<(), i8> {
     Ok(())
 }
 
-fn owner_present(owner: &[u8; 32]) -> bool {
-    QueryIter::new(load_cell_lock_hash, Source::Input).any(|hash| &hash == owner)
+/// Net capacity the owner SPENDS across this transaction: owner-locked inputs
+/// minus owner-locked outputs. Owner authorization needs a *direction*, not
+/// mere presence — a plain presence check would let anyone-can-pay locks
+/// (spendable without a signature as long as capacity stays put) authorize
+/// actions the owner never saw.
+///
+/// * owner actions and creation: the owner must pay (spend > 0);
+/// * closing: the owner must gain (spend < 0), the deposit flows home.
+fn owner_net(owner: &[u8; 32]) -> Result<i128, i8> {
+    let mut net: i128 = 0;
+    for (index, hash) in QueryIter::new(load_cell_lock_hash, Source::Input).enumerate() {
+        if &hash == owner {
+            net += load_cell_capacity(index, Source::Input).map_err(sys)? as i128;
+        }
+    }
+    for (index, hash) in QueryIter::new(load_cell_lock_hash, Source::Output).enumerate() {
+        if &hash == owner {
+            net -= load_cell_capacity(index, Source::Output).map_err(sys)? as i128;
+        }
+    }
+    Ok(net)
 }
 
 fn create(me: &Script) -> Result<(), i8> {
@@ -141,6 +160,12 @@ fn create(me: &Script) -> Result<(), i8> {
     if data[..] != fresh[..len] {
         return Err(E_BAD_NEW_FARM);
     }
+    // The owner must pay for their own farm. A gifted farm whose owner lock
+    // never shows up could never be closed or spent — the capacity in it would
+    // be stuck for ever.
+    if owner_net(&claimed.owner)? <= 0 {
+        return Err(E_NOT_OWNER);
+    }
     Ok(())
 }
 
@@ -152,7 +177,8 @@ fn close() -> Result<(), i8> {
     if !load_actions(0, Source::GroupInput)?.is_empty() {
         return Err(E_CLOSE_WITH_ACTIONS);
     }
-    if !owner_present(&farm.owner) {
+    // Closing makes the owner richer: the deposit has to flow home.
+    if owner_net(&farm.owner)? >= 0 {
         return Err(E_NOT_OWNER);
     }
     Ok(())
@@ -259,7 +285,7 @@ fn update(me: &Script, args: &[u8], unit: u32) -> Result<(), i8> {
     if cells[mine].actions.is_empty() && !outcome.needs_owner {
         return Err(E_NOTHING_HAPPENED);
     }
-    if outcome.needs_owner && !owner_present(&outcome.farm.owner) {
+    if outcome.needs_owner && owner_net(&outcome.farm.owner)? <= 0 {
         return Err(E_NOT_OWNER);
     }
 

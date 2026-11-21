@@ -282,6 +282,16 @@ impl World {
                 tx = tx
                     .output(self.farm_output(&cell.id, cell.unit, *capacity))
                     .output_data(Bytes::from(state.clone()).pack());
+            } else {
+                // Closing: the deposit flows home to the farm's owner.
+                let owner = cell.farm().owner;
+                if let Some(player) = draft.signers.iter().copied().find(|&p| self.owner(p) == owner) {
+                    let refund = CellOutput::new_builder()
+                        .capacity(Capacity::shannons(cell.capacity).pack())
+                        .lock(self.wallet(player))
+                        .build();
+                    tx = tx.output(refund).output_data(Bytes::new().pack());
+                }
             }
         }
         for &player in &draft.signers {

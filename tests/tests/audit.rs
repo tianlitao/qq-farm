@@ -2,7 +2,7 @@
 
 use ckb_testtool::ckb_types::prelude::*;
 use farm_core::*;
-use farm_tests::{act, encode, name, FarmCell, World, T0, UNIT};
+use farm_tests::{act, code, encode, name, FarmCell, World, T0, UNIT};
 
 const RADISH: u8 = 1;
 const HOUR: u32 = UNIT;
@@ -172,10 +172,11 @@ fn probe_fake_owner_zero_lockhash() {
     let mut f = Farm::new([0xee; 32], name("ghost"));
     f.gold = 500;
     let (tx, _) = w.creation(1, encode(&f));
-    match w.verify(&tx) {
-        Ok(_) => println!("farm with unreachable owner accepted at creation (by design)"),
-        Err(e) => println!("refused: {e}"),
-    }
+    // The owner must pay for their own farm: a ghost owner (a lock nobody can
+    // satisfy) could never close the farm or spend its gold, so creation
+    // refuses.
+    let code = code(w.verify(&tx));
+    assert_eq!(code, 46, "ghost-owner farm must be refused at creation");
 }
 
 /// Models an anyone-can-pay-style owner lock: a cell anybody may spend
@@ -222,11 +223,8 @@ fn probe_acp_owner_robbed_via_close() {
         .output_data(Bytes::new().pack())
         .build();
     let tx = w.ctx.complete_tx(tx);
-    match w.verify(&tx) {
-        Ok(_) => println!(
-            "ACP-OWNER FARM CLOSED WITHOUT OWNER CONSENT: {} CKB taken by attacker",
-            cell.capacity / 100_000_000
-        ),
-        Err(e) => println!("refused: {e}"),
-    }
+    // Closing requires the owner to GAIN capacity; here the deposit goes to
+    // the attacker and the owner nets zero, so the script refuses.
+    let code = code(w.verify(&tx));
+    assert_eq!(code, 46, "ACP-owner farm must not be closable by a stranger");
 }

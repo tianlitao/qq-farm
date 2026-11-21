@@ -5,7 +5,7 @@ import { ccc } from "@ckb-ccc/ccc";
 import { useCcc } from "@ckb-ccc/connector-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChainError, type Clock, type FarmCell, FarmChain, type Move } from "./chain/farm";
-import { DEVNET_ACCOUNTS, NETWORKS, type NetworkId, createClient, deploymentOf } from "./chain/network";
+import { DEVNET_ACCOUNTS, NETWORKS, type Deployment, type NetworkId, createClient, deploymentOf } from "./chain/network";
 import { type Catalog, type FarmView, loadRules, view } from "./chain/rules";
 import wasmUrl from "./chain/farm_wasm.wasm?url";
 
@@ -55,10 +55,29 @@ export function useGame() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastId = useRef(0);
 
-  const chain = useMemo(() => {
-    const deployment = deploymentOf(NETWORK);
-    return deployment ? new FarmChain(createClient(NETWORK), NETWORKS[NETWORK], deployment) : undefined;
+  // The deployment record is bundled, but the served copy at
+  // /deployments.json wins: after an on-chain upgrade the site follows the new
+  // code cell without a redeploy.
+  const [deployment, setDeployment] = useState<Deployment | undefined>(() => deploymentOf(NETWORK));
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/deployments.json")
+      .then((res) => (res.ok ? res.json() : undefined))
+      .then((all: Partial<Record<NetworkId, Deployment>> | undefined) => {
+        const fresh = all?.[NETWORK];
+        if (cancelled || fresh?.version !== 2) return;
+        const bundled = deploymentOf(NETWORK);
+        const same = bundled && JSON.stringify(bundled) === JSON.stringify(fresh);
+        if (!cancelled && !same) setDeployment(fresh);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
+  const chain = useMemo(() => {
+    return deployment ? new FarmChain(createClient(NETWORK), NETWORKS[NETWORK], deployment) : undefined;
+  }, [deployment]);
 
   const signer = useMemo(() => {
     if (!chain) return undefined;

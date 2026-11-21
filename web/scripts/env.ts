@@ -11,6 +11,7 @@ import { loadRules } from "../src/chain/rules";
 export const WEB = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const ROOT = resolve(WEB, "..");
 const DEPLOYMENTS = resolve(WEB, "src/chain/deployments.json");
+const SERVED_DEPLOYMENTS = resolve(WEB, "public/deployments.json");
 
 export function arg(name: string, fallback?: string): string | undefined {
   const at = process.argv.indexOf(`--${name}`);
@@ -24,7 +25,11 @@ export function readDeployments(): Partial<Record<NetworkId, Deployment>> {
 export function writeDeployment(network: NetworkId, deployment: Deployment) {
   const all = readDeployments();
   all[network] = deployment;
-  writeFileSync(DEPLOYMENTS, `${JSON.stringify(all, null, 2)}\n`);
+  const text = `${JSON.stringify(all, null, 2)}\n`;
+  writeFileSync(DEPLOYMENTS, text);
+  // The web app fetches this copy at boot, so an upgrade goes live without
+  // redeploying the site.
+  writeFileSync(SERVED_DEPLOYMENTS, text);
 }
 
 export async function openChain(network: NetworkId = "devnet"): Promise<FarmChain> {
