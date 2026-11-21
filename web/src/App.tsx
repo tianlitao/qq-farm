@@ -155,20 +155,7 @@ export function App() {
 
   return (
     <Shell game={game} farm={mine}>
-      <div className="fence top-fence" aria-hidden="true">
-        {Array.from({ length: 26 }, (_, i) => <span key={i} />)}
-      </div>
       <main className="scene">
-        <div className="scenery" aria-hidden="true">
-          <span className="cloud cloud-a" />
-          <span className="cloud cloud-b" />
-          <span className="bird bird-a">ㄟ</span>
-          <span className="bird bird-b">ㄟ</span>
-          <span className="bush bush-a" />
-          <span className="bush bush-b" />
-          <span className="flowers">✿ ❀ ✿</span>
-        </div>
-
         <div className="sign">
           {away ? (
             <>
