@@ -9,10 +9,13 @@ const LEAF_DARK = "#3f7d2a";
 
 const o = {
   stroke: INK,
-  strokeWidth: 2.2,
+  strokeWidth: 2.6,
   strokeLinejoin: "round" as const,
   strokeLinecap: "round" as const,
 };
+
+/** A soft printed shadow, the same on every fruit and every plant. */
+const cast = <ellipse cx="26" cy="43" rx="15" ry="3.2" fill="#22331f" opacity="0.14" />;
 
 const leaf = (d: string, fill = LEAF) => <path d={d} fill={fill} {...o} />;
 
@@ -201,6 +204,8 @@ const FRUIT: Record<number, ReactNode> = {
 export function CropIcon({ id, size = 40 }: { id: number; size?: number }) {
   return (
     <svg viewBox="0 0 48 48" width={size} height={size} role="img" aria-label={CROP_NAMES[id]}>
+      <circle cx="24" cy="24" r="21" fill="#fffaf0" stroke={INK} strokeWidth="2" opacity="0.85" />
+      {cast}
       {FRUIT[id]}
     </svg>
   );
@@ -223,9 +228,11 @@ export function Plant({ crop, stage }: { crop: number; stage: Stage }) {
       )}
       {stage === "sprout" && (
         <>
-          <path d="M48 104V84" fill="none" {...o} stroke={LEAF_DARK} strokeWidth={3.4} />
-          {leaf("M48 86c-10 1-17-5-18-13 9-1 16 4 18 13z")}
-          {leaf("M48 86c10 1 17-5 18-13-9-1-16 4-18 13z", LEAF_DARK)}
+          <path d="M28 104q20-8 40 0" fill="#6e4424" stroke={INK} strokeWidth={2.6} />
+          <path d="M48 104V80" fill="none" {...o} stroke={LEAF_DARK} strokeWidth={4} />
+          {leaf("M48 84c-13 1-21-6-22-17 12-1 20 6 22 17z")}
+          {leaf("M48 84c13 1 21-6 22-17-12-1-20 6-22 17z", LEAF_DARK)}
+          <path d="M44 100h8M38 100h4M54 100h4" stroke="#472a16" strokeWidth={2} strokeLinecap="round" />
         </>
       )}
       {stage === "leafy" && <Bush />}
@@ -257,12 +264,14 @@ export function Plant({ crop, stage }: { crop: number; stage: Stage }) {
 function Bush() {
   return (
     <>
-      <path d="M48 106V70" fill="none" {...o} stroke={LEAF_DARK} strokeWidth={4} />
-      {leaf("M48 96c-16 4-29-4-32-17 14-4 27 3 32 17z")}
-      {leaf("M48 96c16 4 29-4 32-17-14-4-27 3-32 17z", LEAF_DARK)}
-      {leaf("M48 76c-14 0-24-10-24-23 13 0 23 9 24 23z", LEAF_DARK)}
-      {leaf("M48 76c14 0 24-10 24-23-13 0-23 9-24 23z")}
-      {leaf("M48 60c-8-8-8-20 0-29 8 9 8 21 0 29z")}
+      <path d="M28 104q20-9 40 0" fill="#6e4424" stroke={INK} strokeWidth={2.6} />
+      <path d="M48 104V62" fill="none" {...o} stroke={LEAF_DARK} strokeWidth={5} />
+      {leaf("M48 96c-19 4-33-4-36-20 16-4 30 5 36 20z")}
+      {leaf("M48 96c19 4 33-4 36-20-16-4-30 5-36 20z", LEAF_DARK)}
+      {leaf("M48 80c-17 0-28-12-28-27 15 0 26 11 28 27z", LEAF_DARK)}
+      {leaf("M48 80c17 0 28-12 28-27-15 0-26 11-28 27z")}
+      {leaf("M48 58c-9-9-10-22 0-33 10 11 9 24 0 33z", "#82c957")}
+      <path d="M32 74c6-3 11-3 16 1M52 62c5-4 10-4 15-1" fill="none" stroke="#d8f0a7" strokeWidth={2.4} strokeLinecap="round" opacity="0.7" />
     </>
   );
 }
@@ -312,19 +321,29 @@ export function Coin({ size = 20 }: { size?: number }) {
 export function Dog({ size = 64, awake }: { size?: number; awake: boolean }) {
   return (
     <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label={awake ? "看门狗在站岗" : "看门狗饿了"}>
+      <ellipse cx="32" cy="59" rx="19" ry="4" fill={INK} opacity="0.16" />
+      <path d="M12 38C5 33 4 25 9 22c4 3 6 8 7 13z" fill="#8a5a33" {...o} />
       <path d="M13 22c-5-8-3-15 1-17 5 2 8 7 8 14z" fill="#8a5a33" {...o} />
       <path d="M51 22c5-8 3-15-1-17-5 2-8 7-8 14z" fill="#8a5a33" {...o} />
       <path d="M12 30c0-12 9-18 20-18s20 6 20 18c0 14-8 26-20 26S12 44 12 30z" fill="#e8c38d" {...o} />
+      <path d="M12 26c4-7 10-10 15-10-4 5-5 9-5 13-5-1-8-2-10-3z" fill="#b9824c" opacity="0.7" />
       <path d="M22 40c0-6 4-10 10-10s10 4 10 10c0 7-4 12-10 12s-10-5-10-12z" fill="#fbf2df" {...o} />
+      <path d="M14 41c4 4 9 6 12 6M50 41c-4 4-9 6-12 6" fill="none" stroke="#d14b3a" strokeWidth={4} strokeLinecap="round" />
+      <circle cx="32" cy="48" r="3.2" fill="#f6c445" {...o} />
       <path d="M28 37h8l-4 5z" fill={INK} {...o} />
       <path d="M32 42v4c-3 3-6 2-7 0M32 46c3 3 6 2 7 0" fill="none" {...o} strokeWidth={1.8} />
       {awake ? (
         <>
-          <circle cx="23" cy="28" r="2.6" fill={INK} />
-          <circle cx="41" cy="28" r="2.6" fill={INK} />
+          <circle cx="23" cy="28" r="2.8" fill={INK} />
+          <circle cx="41" cy="28" r="2.8" fill={INK} />
+          <path d="M18 17l-4-4M46 17l4-4" stroke={INK} strokeWidth={1.8} strokeLinecap="round" />
         </>
       ) : (
-        <path d="M19 29c2 2 5 2 7 0M38 29c2 2 5 2 7 0" fill="none" {...o} strokeWidth={2} />
+        <>
+          <path d="M19 29c2 2 5 2 7 0M38 29c2 2 5 2 7 0" fill="none" {...o} strokeWidth={2} />
+          <text x="45" y="12" fontSize="12" fill="#22331f">z</text>
+          <text x="52" y="7" fontSize="9" fill="#22331f">z</text>
+        </>
       )}
     </svg>
   );
