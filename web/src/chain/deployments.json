@@ -6,10 +6,9 @@
       "index": 0
     },
     "code": {
-      "txHash": "0xc1e69668321b38838274dddc37590493194e901931c60f3d39523ecad8f6e4a7",
+      "txHash": "0x5e6d2bb577c87055d52928fe922093bd64e89d1592eda6b40afbe1b4029c186c",
       "index": 0
     },
-    "codeTypeId": "0x304ae62a9fad7e9aecd2f1cfb335d61e067e8e08d817c0039386595e82c01448",
     "codeHash": "0xe80a23f18da7ca31fee294ef8784ff3077daa3546f9d36ec7ed57c5ef9566320",
     "unit": 30,
     "codeScriptHash": "0xe302f431740eb3b306571206dc3da768615f172ce7757a7d24473a3c1fd0809b"

@@ -733,7 +733,7 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
     <>
       <h2>规则</h2>
       <div className="prose">
-        <p>这里没有服务器。农场是 CKB 上的一个格子，下面每一条都写在合约里，由全网节点验算，包括部署者在内没有人能改。</p>
+        <p>这里没有服务器。农场是 CKB 上的一个格子，下面每一条都写在合约里，由全网节点验算。合约可以由部署者公开升级（换规则代码，链上可查）；但只要运行的还是这份规则，谁也不能单方面动你的农场，cell 里押的 CKB 只增不减。</p>
         <ul>
           <li>这个世界里 1 个游戏小时是 {span(unit)}，一天 {catalog.hoursPerDay} 小时。</li>
           <li>播种的时刻取自打包那笔交易的区块，谁也没法谎报。</li>
@@ -752,7 +752,14 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
           我的地址
           <code>{game.address}</code>
         </p>
-        <p>农场格子里押着的 CKB 始终是你的。收回农场会销毁这座农场连同里面的金币、作物和等级，把 CKB 退回钱包，无法撤销。</p>
+        <p>农场格子里押着的 CKB 是你的：这份规则下它只增不减，只有你能收回。收回农场会销毁这座农场连同里面的金币、作物和等级，把 CKB 退回钱包，无法撤销。注意：部署者若升级成恶意规则或销毁代码 cell，可能影响甚至冻结这些 CKB——升级权是真实存在的信任前提。</p>
+        <p>
+          已审计：qwen4-max（2026-11-21），源码审查 + CKB-VM 攻击探针 + 实链验证。
+          <a href="https://github.com/tianlitao/qq-farm/blob/main/AUDIT.md" target="_blank" rel="noreferrer">
+            查看审计报告
+          </a>
+          。模型审计，不等同第三方审计公司；上主网前的待办在报告里逐条列明。
+        </p>
         <button className="btn small danger" disabled={!!game.busy} onClick={askClose}>
           收回农场，取回 CKB
         </button>
