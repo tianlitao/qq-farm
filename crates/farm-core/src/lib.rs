@@ -474,17 +474,22 @@ fn id_word(id: &[u8; 32], at: usize) -> u32 {
 }
 
 /// Each thief maps to one of 16 slots per plot and season; a slot can be used
-/// once. This bounds the state while keeping one farm from stealing twice.
+/// once. The thief's identity is their farm's **owner lock hash**, not the farm
+/// id: one player can run many farms, and they all share the same slots —
+/// extra farms buy a sybil nothing. This bounds the state while keeping one
+/// player from stealing twice.
 pub fn thief_slot(plot: &Plot, thief: &[u8; 32]) -> u16 {
     1 << (mix32(id_word(thief, 0) ^ plot.seed) & 15)
 }
 
-/// Does a fed dog keep this thief away from this plot (this season)?
+/// Does a fed dog keep this thief away from this plot (this season)? Keyed on
+/// the thief's owner, like [`thief_slot`].
 pub fn dog_blocks(plot: &Plot, thief: &[u8; 32]) -> bool {
     mix32(id_word(thief, 4) ^ plot.seed ^ 0x0d06_0d06) % 100 < DOG_BLOCK_PERCENT
 }
 
-/// Why (or whether) `thief` can steal from the plot right now.
+/// Why (or whether) `thief` — a player's owner lock hash — can steal from the
+/// plot right now.
 pub fn check_steal(farm: &Farm, plot: &Plot, thief: &[u8; 32], now: u32, unit: u32) -> Result<u8> {
     if plot.is_empty() {
         return Err(Error::PlotEmpty);
@@ -780,10 +785,13 @@ fn run_actions(
                 if actor == input.index {
                     return Err(Error::BadActor);
                 }
+                // The thief's identity is the owner lock hash recorded in the
+                // actor farm's state: many farms, one identity per player.
                 let actor_id = all
                     .iter()
                     .find(|f| f.index == actor)
-                    .map(|f| f.id)
+                    .map(|f| owner_in_state(f.state))
+                    .transpose()?
                     .ok_or(Error::BadActor)?;
                 let credit = match op {
                     OP_HELP => {
@@ -835,6 +843,17 @@ pub struct Outcome {
     /// True if the farm's owner must have authorised the transaction: an owner
     /// action ran on it, or it visited another farm.
     pub needs_owner: bool,
+}
+
+/// The owner lock hash recorded in a farm's state (bytes 1..33, right after
+/// the version byte).
+fn owner_in_state(state: &[u8]) -> Result<[u8; 32]> {
+    if state.len() < 1 + 32 || state[0] != VERSION {
+        return Err(Error::BadState);
+    }
+    let mut owner = [0u8; 32];
+    owner.copy_from_slice(&state[1..33]);
+    Ok(owner)
 }
 
 /// Computes the state `farms[me]` must have after the transaction.

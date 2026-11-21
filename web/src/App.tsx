@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { Bug, Coin, CropIcon, CROP_NAMES, Dog, Drop, Plant, type Stage, Weed } from "./art/crops";
+import { Bug, Coin, CropIcon, Dog, Drop, Plant, type Stage, Weed } from "./art/crops";
 import { SceneBackdrop } from "./art/scene";
+import { t, useLang, cropName } from "./i18n";
 import type { Move } from "./chain/farm";
 import { type Catalog, type FarmView, KIND_DRY, KIND_PEST, KIND_WEED, type PlotView } from "./chain/rules";
 import { type Game, useGame } from "./game";
@@ -9,47 +10,50 @@ type Drawer = "seeds" | "barn" | "neighbours" | "rules" | undefined;
 type Dialog = "rename" | "close" | undefined;
 type VisitTool = "hand" | "weed" | "pest";
 
-const KIND_VERB = ["除草", "除虫", "浇水"];
+const KIND_VERB = ["verbWeed", "verbPest", "verbWater"];
 /** Why a ripe plot gives a visitor nothing, by rule error code. */
-const WHY_NOT: Record<number, string> = { 29: "你摘过了", 30: "给主人留着", 31: "狗守着" };
+const WHY_NOT: Record<number, string> = { 29: "youStole", 30: "forOwner", 31: "dogGuards" };
 const num = (n: number) => n.toLocaleString("zh-CN");
 
 function span(seconds: number): string {
   const s = Math.max(0, Math.ceil(seconds));
-  if (s >= 3600) return `${Math.floor(s / 3600)}小时${Math.floor((s % 3600) / 60)}分`;
-  if (s >= 60) return `${Math.floor(s / 60)}分${String(s % 60).padStart(2, "0")}秒`;
-  return `${s}秒`;
+  if (s >= 3600) return `${Math.floor(s / 3600)}${t("timeH")}${Math.floor((s % 3600) / 60)}${t("timeM")}`;
+  if (s >= 60) return `${Math.floor(s / 60)}${t("timeM")}${String(s % 60).padStart(2, "0")}${t("timeS")}`;
+  return `${s}${t("timeS")}`;
 }
 
 function describe(move: Move, game: Game): string {
   const a = move.action;
-  const at = "plot" in a ? `${a.plot + 1}号地` : "";
-  const whose = move.farm === game.mine?.id ? "" : `${game.look(game.farms.find((f) => f.id === move.farm), false)?.name || "邻居"}：`;
+  const at = "plot" in a ? t("plotText", { i: a.plot + 1 }) : "";
+  const whose =
+    move.farm === game.mine?.id
+      ? ""
+      : `${game.look(game.farms.find((f) => f.id === move.farm), false)?.name || t("unnamedFarm")}：`;
   switch (a.op) {
     case "buy":
-      return `买${CROP_NAMES[a.crop]}种子 ×${a.count}`;
+      return t("dBuy", { crop: cropName(a.crop), count: a.count });
     case "plant":
-      return `${at}种${CROP_NAMES[a.crop]}`;
+      return t("dPlant", { plot: at, crop: cropName(a.crop) });
     case "harvest":
-      return `收获${at}`;
+      return t("dHarvest", { plot: at });
     case "shovel":
-      return `铲除${at}`;
+      return t("dShovel", { plot: at });
     case "sell":
-      return `卖${CROP_NAMES[a.crop]} ×${a.count}`;
+      return t("dSell", { crop: cropName(a.crop), count: a.count });
     case "expand":
-      return "开垦新地";
+      return t("dExpand");
     case "feedDog":
-      return "喂狗";
+      return t("dFeedDog");
     case "clear":
-      return `${at}${KIND_VERB[a.kind]}`;
+      return `${at}${t(KIND_VERB[a.kind] ?? "")}`;
     case "rename":
-      return `改名为「${a.name}」`;
+      return t("dRename", { name: a.name });
     case "help":
-      return `${whose}帮${at}${KIND_VERB[a.kind]}`;
+      return t("dHelp", { who: whose, plot: at, verb: t(KIND_VERB[a.kind] ?? "") });
     case "mischief":
-      return `${whose}往${at}${a.kind === KIND_WEED ? "放草" : "放虫"}`;
+      return t(a.kind === KIND_WEED ? "dMischiefWeed" : "dMischiefPest", { who: whose, plot: at });
     case "steal":
-      return `${whose}摘${at}`;
+      return t("dSteal", { who: whose, plot: at });
   }
 }
 
@@ -63,6 +67,7 @@ function stageOf(plot: PlotView, now: number): Stage {
 
 export function App() {
   const game = useGame();
+  useLang(); // the whole tree re-renders when the language flips
   const [drawer, setDrawer] = useState<Drawer>();
   const [dialog, setDialog] = useState<Dialog>();
   const [seed, setSeed] = useState(1);
@@ -75,7 +80,7 @@ export function App() {
           <div className="boot-art">
             <Plant crop={6} stage="sprout" />
           </div>
-          <p className="boot-text">正在读取链上的田地…</p>
+          <p className="boot-text">{t("bootText")}</p>
           <div className="boot-dots" aria-hidden="true">
             <i />
             <i />
@@ -95,7 +100,7 @@ export function App() {
           <h2>{game.phase.why}</h2>
           {game.phase.hint && <p>{game.phase.hint}</p>}
           <button className="btn big" onClick={() => location.reload()}>
-            重新连接
+            {t("reload")}
           </button>
         </div>
       </Shell>
@@ -122,7 +127,7 @@ export function App() {
     const have = mine.seeds[seed - 1];
     const buy = Math.min(Math.max(0, plots.length - have), Math.floor(mine.gold / info.seedPrice));
     const count = Math.min(plots.length, have + buy);
-    if (count === 0) return game.toast("bad", `金币不够买${CROP_NAMES[seed]}种子`);
+    if (count === 0) return game.toast("bad", t("notEnoughGoldSeeds", { crop: cropName(seed) }));
     const moves: Move[] = buy > 0 ? [me({ op: "buy", crop: seed, count: buy })] : [];
     plots.slice(0, count).forEach((plot) => moves.push(me({ op: "plant", plot, crop: seed })));
     game.add(...moves);
@@ -134,7 +139,7 @@ export function App() {
   const onPlot = (index: number) => {
     const plot = shown.plots[index];
     if (away) {
-      if (!plot.crop) return game.toast("info", "这块地是空的");
+      if (!plot.crop) return game.toast("info", t("emptyPlotToast"));
       const p = plot as PlotView;
       if (tool !== "hand") {
         return game.add(them({ op: "mischief", plot: index, kind: tool === "weed" ? KIND_WEED : KIND_PEST }));
@@ -143,7 +148,7 @@ export function App() {
       const help = chores(p, index, "help");
       if (help.length) return game.add(...help.map(them));
       if (p.ripe) return game.add(them({ op: "steal", plot: index })); // says why not
-      return game.toast("info", p.withered ? "已经枯萎了" : "长势不错，没什么要帮忙的");
+      return game.toast("info", p.withered ? t("alreadyWithered") : t("nothingToHelp"));
     }
     if (!plot.crop) return sow([index]);
     const p = plot as PlotView;
@@ -151,21 +156,21 @@ export function App() {
     const fix = chores(p, index, "clear");
     if (fix.length) return game.add(...fix.map(me));
     if (p.ripe) return game.add(me({ op: "harvest", plot: index }));
-    game.toast("info", p.pending ? "种子刚下地，等区块确认" : `${CROP_NAMES[p.crop]}还要 ${span(p.ripeAt - game.now)}`);
+    game.toast("info", p.pending ? t("pendingWait") : t("notRipeYet", { crop: cropName(p.crop), time: span(p.ripeAt - game.now) }));
   };
 
   const plots = shown.plots.map((plot, index) => ({ plot, index }));
   const growing = plots.filter((x) => x.plot.crop) as { plot: PlotView; index: number }[];
-  const batch = away
-    ? {
-        摘取: growing.filter((x) => x.plot.steal > 0).map((x) => them({ op: "steal", plot: x.index })),
-        帮忙: growing.flatMap((x) => chores(x.plot, x.index, "help").map(them)),
-      }
-    : {
-        收获: growing.filter((x) => x.plot.ripe && !x.plot.problems.some(Boolean)).map((x) => me({ op: "harvest", plot: x.index })),
-        打理: growing.filter((x) => !x.plot.withered).flatMap((x) => chores(x.plot, x.index, "clear").map(me)),
-        铲除: growing.filter((x) => x.plot.withered).map((x) => me({ op: "shovel", plot: x.index })),
-      };
+  const batchList: { label: string; moves: Move[] }[] = away
+    ? [{ label: t("harvestAll"), moves: growing.filter((x) => x.plot.steal > 0).map((x) => them({ op: "steal", plot: x.index })) }]
+    : [
+        {
+          label: t("harvestAll"),
+          moves: growing.filter((x) => x.plot.ripe && !x.plot.problems.some(Boolean)).map((x) => me({ op: "harvest", plot: x.index })),
+        },
+        { label: t("tidyAll"), moves: growing.filter((x) => !x.plot.withered).flatMap((x) => chores(x.plot, x.index, "clear").map(me)) },
+        { label: t("shovelAll"), moves: growing.filter((x) => x.plot.withered).map((x) => me({ op: "shovel", plot: x.index })) },
+      ];
   const empty = plots.filter((x) => !x.plot.crop).map((x) => x.index);
   const next = mine.land < catalog.maxPlots ? catalog.expand[mine.land - catalog.initPlots] : undefined;
 
@@ -175,39 +180,39 @@ export function App() {
         <div className="sign">
           {away ? (
             <>
-              <span className="sign-name">{away.name || "无名农场"}</span>
-              <span className="sign-sub">{away.level} 级，你在这里做客</span>
+              <span className="sign-name">{away.name || t("unnamedFarm")}</span>
+              <span className="sign-sub">{t("visiting", { level: away.level })}</span>
               <button className="btn small" onClick={() => game.visit(undefined)}>
-                回自己的农场
+                {t("backHome")}
               </button>
             </>
           ) : (
             <>
-              <span className="sign-name">{mine.name || "我的农场"}</span>
+              <span className="sign-name">{mine.name || t("myFarmFallback")}</span>
               <button className="link" onClick={() => setDialog("rename")}>
-                改名
+                {t("rename")}
               </button>
             </>
           )}
         </div>
 
         <div className="quick">
-          {Object.entries(batch).map(([label, moves]) => (
+          {batchList.map(({ label, moves }) => (
             <button key={label} className="btn small" disabled={moves.length === 0} onClick={() => game.add(...moves)}>
-              全部{label}
+              {label}
               {moves.length > 0 && <b>{moves.length}</b>}
             </button>
           ))}
           {!away && (
             <button className="btn small" disabled={empty.length === 0} onClick={() => sow(empty)}>
-              空地全种{CROP_NAMES[seed]}
+              {t("sowAll", { crop: cropName(seed) })}
             </button>
           )}
           {away && (
-            <span className="tools" role="group" aria-label="做客时用的工具">
-              {(["hand", "weed", "pest"] as const).map((t) => (
-                <button key={t} className={`btn small ${tool === t ? "on" : ""}`} aria-pressed={tool === t} onClick={() => setTool(t)}>
-                  {t === "hand" ? "摘取和帮忙" : t === "weed" ? "放草" : "放虫"}
+            <span className="tools" role="group" aria-label={t("visitTools")}>
+              {(["hand", "weed", "pest"] as const).map((k) => (
+                <button key={k} className={`btn small ${tool === k ? "on" : ""}`} aria-pressed={tool === k} onClick={() => setTool(k)}>
+                  {t(k === "hand" ? "toolHand" : k === "weed" ? "toolWeed" : "toolPest")}
                 </button>
               ))}
             </span>
@@ -227,11 +232,11 @@ export function App() {
               <span className="locked-flag" aria-hidden="true">
                 +
               </span>
-              <span className="locked-title">开垦这块地</span>
+              <span className="locked-title">{t("lockedTitle")}</span>
               <span className="locked-cost">
                 <Coin size={16} /> {num(next.price)}
               </span>
-              <span className="locked-cost">需要 {next.level} 级</span>
+              <span className="locked-cost">{t("lockedLevel", { level: next.level })}</span>
             </button>
           )}
         </div>
@@ -241,30 +246,33 @@ export function App() {
 
       <Basket game={game} />
 
-      <nav className="dock" aria-label="农场菜单">
+      <nav className="dock" aria-label="dock">
         <button className={`dock-btn ${drawer === "seeds" ? "on" : ""}`} onClick={() => setDrawer(drawer === "seeds" ? undefined : "seeds")}>
           <CropIcon id={seed} size={34} />
-          <span>种子</span>
+          <span>{t("dockSeeds")}</span>
         </button>
         <button className={`dock-btn ${drawer === "barn" ? "on" : ""}`} onClick={() => setDrawer(drawer === "barn" ? undefined : "barn")}>
           <BarnIcon />
-          <span>仓库</span>
+          <span>{t("dockBarn")}</span>
           {mine.fruits.some(Boolean) && <b className="dot">{num(mine.fruits.reduce((a, b) => a + b, 0))}</b>}
         </button>
-        <button className={`dock-btn ${drawer === "neighbours" ? "on" : ""}`} onClick={() => setDrawer(drawer === "neighbours" ? undefined : "neighbours")}>
+        <button
+          className={`dock-btn ${drawer === "neighbours" ? "on" : ""}`}
+          onClick={() => setDrawer(drawer === "neighbours" ? undefined : "neighbours")}
+        >
           <FenceIcon />
-          <span>邻居</span>
+          <span>{t("dockNeighbours")}</span>
           {game.farms.length > 1 && <b className="dot">{game.farms.length - 1}</b>}
         </button>
         <button className={`dock-btn ${drawer === "rules" ? "on" : ""}`} onClick={() => setDrawer(drawer === "rules" ? undefined : "rules")}>
           <BookIcon />
-          <span>规则</span>
+          <span>{t("dockRules")}</span>
         </button>
       </nav>
 
       {drawer && (
-        <aside className="drawer" aria-label="面板">
-          <button className="drawer-close" onClick={() => setDrawer(undefined)} aria-label="关闭">
+        <aside className="drawer" aria-label="panel">
+          <button className="drawer-close" onClick={() => setDrawer(undefined)} aria-label="×">
             ×
           </button>
           {drawer === "seeds" && <Seeds catalog={catalog} farm={mine} seed={seed} pick={setSeed} />}
@@ -284,7 +292,7 @@ export function App() {
       )}
 
       {dialog === "rename" && (
-        <Modal title="给农场起个名字" onClose={() => setDialog(undefined)}>
+        <Modal title={t("renameTitle")} onClose={() => setDialog(undefined)}>
           <RenameForm
             current={mine.name}
             submit={(name) => {
@@ -295,13 +303,11 @@ export function App() {
         </Modal>
       )}
       {dialog === "close" && (
-        <Modal title="收回农场？" onClose={() => setDialog(undefined)}>
-          <p className="modal-text">
-            金币、作物和等级都会随之消失，只有格子里的 CKB 回到钱包，这一步无法撤销。
-          </p>
+        <Modal title={t("closeTitle")} onClose={() => setDialog(undefined)}>
+          <p className="modal-text">{t("closeText")}</p>
           <div className="modal-actions">
             <button className="btn" onClick={() => setDialog(undefined)}>
-              再想想
+              {t("cancel")}
             </button>
             <button
               className="btn danger"
@@ -311,7 +317,7 @@ export function App() {
                 setDialog(undefined);
               }}
             >
-              确认收回
+              {t("confirmClose")}
             </button>
           </div>
         </Modal>
@@ -321,6 +327,7 @@ export function App() {
 }
 
 function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children: React.ReactNode }) {
+  const [lang, setLang] = useLang();
   const ckb = game.balance === undefined ? "…" : num(Math.floor(Number(game.balance / 100_000_000n)));
   return (
     <div className="app">
@@ -340,27 +347,34 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
             </svg>
           </span>
           <span className="brand-name">垄上</span>
-          <span className="brand-sub">{game.network.name}上的农场</span>
+          <span className="brand-sub">{t("brandSub", { network: t(game.network.id === "devnet" ? "netDevnet" : game.network.id === "testnet" ? "netTestnet" : "netMainnet") })}</span>
         </div>
         {farm && (
           <div className="stats">
-            <div className="level" title={`经验 ${num(farm.exp)} / ${num(farm.levelTo)}`}>
+            <div className="level" title={`EXP ${num(farm.exp)} / ${num(farm.levelTo)}`}>
               <span className="level-n">{farm.level}</span>
-              <span className="level-word">级</span>
+              <span className="level-word">{t("levelWord")}</span>
               <span className="bar">
                 <i style={{ width: `${(100 * (farm.exp - farm.levelFrom)) / (farm.levelTo - farm.levelFrom)}%` }} />
               </span>
             </div>
-            <div className="gold" title="金币">
+            <div className="gold" title={t("goldTitle")}>
               <Coin size={22} />
               <span>{num(farm.gold)}</span>
             </div>
           </div>
         )}
         <div className="wallet">
+          <button
+            className="btn small lang-toggle"
+            onClick={() => setLang(lang === "zh" ? "en" : "zh")}
+            aria-label={lang === "zh" ? "Switch to English" : "切换到中文"}
+          >
+            {lang === "zh" ? "EN" : "中文"}
+          </button>
           {game.accounts.length > 0 ? (
             <label>
-              <span className="sr">账户</span>
+              <span className="sr">{t("account")}</span>
               <select value={game.accountIndex} onChange={(e) => game.setAccountIndex(Number(e.target.value))} disabled={!!game.busy}>
                 {game.accounts.map((a, i) => (
                   <option key={a.key} value={i}>
@@ -371,7 +385,7 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
             </label>
           ) : (
             <button className="btn small" onClick={() => (game.wallet.connected ? game.wallet.disconnect() : game.wallet.open())}>
-              {game.wallet.connected ? "断开钱包" : "连接钱包"}
+              {game.wallet.connected ? t("disconnectWallet") : t("connectWallet")}
             </button>
           )}
           <span className="ckb" title={game.address}>
@@ -382,9 +396,9 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
       {children}
       <div className="toasts" role="status" aria-live="polite">
         {game.busy && <div className="toast busy">{game.busy}</div>}
-        {game.toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.kind}`}>
-            {t.text}
+        {game.toasts.map((toastItem) => (
+          <div key={toastItem.id} className={`toast ${toastItem.kind}`}>
+            {toastItem.text}
           </div>
         ))}
       </div>
@@ -404,7 +418,7 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
       aria-label={title}
     >
       <div className="modal">
-        <button className="drawer-close" onClick={onClose} aria-label="关闭">
+        <button className="drawer-close" onClick={onClose} aria-label="×">
           ×
         </button>
         <h2>{title}</h2>
@@ -427,7 +441,7 @@ function RenameForm({ current, submit }: { current: string; submit: (name: strin
       <input className="modal-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={18} autoFocus />
       <div className="modal-actions">
         <button className="btn big" disabled={!name.trim()}>
-          就叫这个
+          {t("renameBtn")}
         </button>
       </div>
     </form>
@@ -450,41 +464,48 @@ function Claim({ game }: { game: Game }) {
       <div className="claim-art">
         <Plant crop={6} stage="ripe" />
       </div>
-      <h1>开垦一块自己的地</h1>
-      <p>农场是一个存在 CKB 链上的格子，之后的每一次播种、收获和串门都由链上合约按同一套规则验算。</p>
+      <h1>{t("claimTitle")}</h1>
+      <p>{t("claimIntro")}</p>
       {catalog && (
         <ul className="claim-facts">
           <li>
-            <b>≈332 CKB</b>
-            <span>占地押金，随时收回</span>
+            <b>{t("factDeposit")}</b>
+            <span>{t("factDepositNote")}</span>
           </li>
           <li>
-            <b>{num(catalog.initGold)} 金币</b>
-            <span>开垦即得的种子钱</span>
+            <b>{t("factGold", { gold: num(catalog.initGold) })}</b>
+            <span>{t("factGoldNote")}</span>
           </li>
           <li>
-            <b>{catalog.initPlots} 块地</b>
-            <span>攒经验可开垦到 {catalog.maxPlots} 块</span>
+            <b>{t("factPlots", { plots: catalog.initPlots })}</b>
+            <span>{t("factPlotsNote", { max: catalog.maxPlots })}</span>
           </li>
         </ul>
       )}
       <label className="field-label" htmlFor="farm-name">
-        农场的名字
+        {t("farmNameLabel")}
       </label>
-      <input id="farm-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="我的农场" maxLength={18} autoFocus />
+      <input id="farm-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("myFarmFallback")} maxLength={18} autoFocus />
       {noWallet ? (
         <button className="btn big" onClick={game.wallet.open}>
-          连接钱包
+          {t("connectWallet")}
         </button>
       ) : (
         <button className="btn big" disabled={!!game.busy || poor}>
-          {game.busy ?? "开垦农场"}
+          {game.busy ?? t("createFarm")}
         </button>
       )}
-      {noWallet && <p className="drawer-note">连接 CCC 支持的钱包后就能开垦，JoyID、MetaMask 等都可以。</p>}
+      {noWallet && <p className="drawer-note">{t("walletHint")}</p>}
       {!noWallet && poor && (
         <p className="warn">
-          这个账户的 CKB 不够。{game.network.faucet ? <a href={game.network.faucet} target="_blank" rel="noreferrer">去水龙头领取测试币</a> : "换一个测试账户试试。"}
+          {t("poor")}
+          {game.network.faucet ? (
+            <a href={game.network.faucet} target="_blank" rel="noreferrer">
+              {t("faucetLink")}
+            </a>
+          ) : (
+            t("tryAnother")
+          )}
           {game.address && <code>{game.address}</code>}
         </p>
       )}
@@ -492,12 +513,24 @@ function Claim({ game }: { game: Game }) {
   );
 }
 
-function PlotTile({ plot, index, now, away, onClick }: { plot: FarmView["plots"][number]; index: number; now: number; away: boolean; onClick: () => void }) {
+function PlotTile({
+  plot,
+  index,
+  now,
+  away,
+  onClick,
+}: {
+  plot: FarmView["plots"][number];
+  index: number;
+  now: number;
+  away: boolean;
+  onClick: () => void;
+}) {
   if (!plot.crop) {
     return (
-      <button className="plot empty" onClick={onClick} aria-label={`${index + 1}号地，空地`}>
+      <button className="plot empty" onClick={onClick} aria-label={t("plotText", { i: index + 1 })}>
         <span className="soil" />
-        {!away && <span className="hint">点一下播种</span>}
+        {!away && <span className="hint">{t("emptyHint")}</span>}
       </button>
     );
   }
@@ -505,18 +538,24 @@ function PlotTile({ plot, index, now, away, onClick }: { plot: FarmView["plots"]
   const stage = stageOf(p, now);
   const dry = !!p.problems[KIND_DRY];
   const status = p.withered
-    ? "已枯萎"
+    ? t("withered")
     : p.pending
-      ? "刚播下"
+      ? t("justSown")
       : p.ripe
         ? away
           ? p.steal > 0
-            ? `可摘 ${p.steal}`
-            : (WHY_NOT[-p.steal] ?? "熟了")
-          : `可收 ${p.harvest}`
+            ? t("canSteal", { n: p.steal })
+            : WHY_NOT[-p.steal]
+              ? t(WHY_NOT[-p.steal])
+              : t("ripe")
+          : t("canHarvest", { n: p.harvest })
         : span(p.ripeAt - now);
   return (
-    <button className={`plot ${stage} ${dry ? "dry" : ""} ${p.pending ? "pending" : ""}`} onClick={onClick} aria-label={`${index + 1}号地，${CROP_NAMES[p.crop]}，${status}`}>
+    <button
+      className={`plot ${stage} ${dry ? "dry" : ""} ${p.pending ? "pending" : ""}`}
+      onClick={onClick}
+      aria-label={t("plotText", { i: index + 1 })}
+    >
       <span className="soil" />
       <Plant crop={p.crop} stage={stage} />
       <span className="pests">
@@ -524,17 +563,29 @@ function PlotTile({ plot, index, now, away, onClick }: { plot: FarmView["plots"]
         {!!p.problems[KIND_PEST] && <Bug />}
         {dry && <Drop />}
       </span>
-      {p.stolen > 0 && <span className="stolen">被摘 {p.stolen}</span>}
+      {p.stolen > 0 && <span className="stolen">{t("stolen", { n: p.stolen })}</span>}
       <span className={`tag ${p.ripe ? "ripe" : ""}`}>
-        <b>{CROP_NAMES[p.crop]}</b>
+        <b>{cropName(p.crop)}</b>
         {status}
-        {p.season > 0 && !p.withered && <i>第{p.season + 1}季</i>}
+        {p.season > 0 && !p.withered && <i>{t("season", { n: p.season + 1 })}</i>}
       </span>
     </button>
   );
 }
 
-function Kennel({ farm, game, away, catalog, onFeed }: { farm: FarmView; game: Game; away: boolean; catalog: Catalog; onFeed: () => void }) {
+function Kennel({
+  farm,
+  game,
+  away,
+  catalog,
+  onFeed,
+}: {
+  farm: FarmView;
+  game: Game;
+  away: boolean;
+  catalog: Catalog;
+  onFeed: () => void;
+}) {
   const awake = farm.dogUntil > game.now;
   const can = farm.level >= catalog.dogLevel;
   return (
@@ -550,20 +601,20 @@ function Kennel({ farm, game, away, catalog, onFeed }: { farm: FarmView; game: G
         </span>
       </span>
       <div className="kennel-text">
-        <b>{awake ? `看门狗站岗中，还有 ${span(farm.dogUntil - game.now)}` : "看门狗饿着，不看门"}</b>
+        <b>{awake ? t("dogAwake", { time: span(farm.dogUntil - game.now) }) : t("dogHungry")}</b>
         <span>
           {away
             ? awake
-              ? `它会拦下你在大约${catalog.dogBlockPercent}%的地里伸出的手`
-              : "现在摘菜没有狗管"
+              ? t("dogVisitorAwake", { percent: catalog.dogBlockPercent })
+              : t("dogVisitorGone")
             : can
-              ? `喂一次管一整天（${span(catalog.hoursPerDay * game.chain!.unit)}），能挡住约${catalog.dogBlockPercent}%的偷摘`
-              : `${catalog.dogLevel} 级后可以喂狗看门`}
+              ? t("dogFeedInfo", { time: span(catalog.hoursPerDay * game.chain!.unit), percent: catalog.dogBlockPercent })
+              : t("dogLocked", { level: catalog.dogLevel })}
         </span>
       </div>
       {!away && (
         <button className="btn small" disabled={!can || farm.gold < catalog.dogFoodPrice} onClick={onFeed}>
-          喂狗 <Coin size={14} /> {catalog.dogFoodPrice}
+          {t("feedDog")} <Coin size={14} /> {catalog.dogFoodPrice}
         </button>
       )}
     </div>
@@ -575,12 +626,12 @@ function Basket({ game }: { game: Game }) {
   const dropped = new Map(game.sifted?.dropped.map((d) => [d.move, d.reason]));
   const ready = game.basket.length - dropped.size;
   return (
-    <section className="basket" aria-label="待上链的操作">
+    <section className="basket" aria-label={t("basketAria")}>
       <div className="basket-list">
         {game.basket.map((move, i) => (
           <span key={i} className={`chip ${dropped.has(move) ? "bad" : ""}`} title={dropped.get(move)}>
             {describe(move, game)}
-            <button onClick={() => game.remove(i)} aria-label="撤销这一步" disabled={!!game.busy}>
+            <button onClick={() => game.remove(i)} aria-label={t("undoOne")} disabled={!!game.busy}>
               ×
             </button>
           </span>
@@ -588,10 +639,10 @@ function Basket({ game }: { game: Game }) {
       </div>
       <div className="basket-actions">
         <button className="link" onClick={game.clear} disabled={!!game.busy}>
-          全部撤销
+          {t("undoAll")}
         </button>
         <button className="btn big" onClick={() => game.send()} disabled={!!game.busy || ready === 0}>
-          {game.busy ?? `上链，${ready} 个操作一笔交易`}
+          {game.busy ?? t("send", { n: ready })}
         </button>
       </div>
     </section>
@@ -601,8 +652,8 @@ function Basket({ game }: { game: Game }) {
 function Seeds({ catalog, farm, seed, pick }: { catalog: Catalog; farm: FarmView; seed: number; pick: (id: number) => void }) {
   return (
     <>
-      <h2>种子</h2>
-      <p className="drawer-note">选一种拿在手里，点空地就种下。袋里没有会顺手买一颗。</p>
+      <h2>{t("dockSeeds")}</h2>
+      <p className="drawer-note">{t("seedsNote")}</p>
       <ul className="list">
         {catalog.crops.map((c) => {
           const locked = farm.level < c.level;
@@ -611,23 +662,22 @@ function Seeds({ catalog, farm, seed, pick }: { catalog: Catalog; farm: FarmView
               <button className={`row ${seed === c.id ? "on" : ""}`} disabled={locked} aria-pressed={seed === c.id} onClick={() => pick(c.id)}>
                 <CropIcon id={c.id} size={44} />
                 <span className="row-main">
-                  <b>{CROP_NAMES[c.id]}</b>
+                  <b>{cropName(c.id)}</b>
                   <span>
-                    {c.growHours} 小时成熟，收 {c.yield} 个{c.seasons > 1 ? `，共 ${c.seasons} 季` : ""}
+                    {t("growInfo", { hours: c.growHours, yield: c.yield })}
+                    {c.seasons > 1 ? t("seasonsMore", { seasons: c.seasons }) : ""}
                   </span>
-                  <span>
-                    每个卖 {c.sellPrice}，经验 +{c.exp}
-                  </span>
+                  <span>{t("sellInfo", { price: c.sellPrice, exp: c.exp })}</span>
                 </span>
                 <span className="row-side">
                   {locked ? (
-                    <i>{c.level} 级解锁</i>
+                    <i>{t("lockedUnlock", { level: c.level })}</i>
                   ) : (
                     <>
                       <span className="price">
                         <Coin size={14} /> {num(c.seedPrice)}
                       </span>
-                      {farm.seeds[c.id - 1] > 0 && <i>袋里有 {farm.seeds[c.id - 1]}</i>}
+                      {farm.seeds[c.id - 1] > 0 && <i>{t("inBag", { n: farm.seeds[c.id - 1] })}</i>}
                     </>
                   )}
                 </span>
@@ -645,9 +695,9 @@ function Barn({ catalog, farm, sell }: { catalog: Catalog; farm: FarmView; sell:
   const worth = stock.reduce((sum, c) => sum + c.sellPrice * farm.fruits[c.id - 1], 0);
   return (
     <>
-      <h2>仓库</h2>
+      <h2>{t("dockBarn")}</h2>
       {stock.length === 0 ? (
-        <p className="drawer-note">仓库是空的。收获的果实会放在这里，卖掉换金币。</p>
+        <p className="drawer-note">{t("barnNote")}</p>
       ) : (
         <>
           <ul className="list">
@@ -658,19 +708,19 @@ function Barn({ catalog, farm, sell }: { catalog: Catalog; farm: FarmView; sell:
                   <CropIcon id={c.id} size={44} />
                   <span className="row-main">
                     <b>
-                      {CROP_NAMES[c.id]} ×{num(n)}
+                      {cropName(c.id)} ×{num(n)}
                     </b>
-                    <span>每个卖 {c.sellPrice}</span>
+                    <span>{t("perFruit", { price: c.sellPrice })}</span>
                   </span>
                   <button className="btn small" onClick={() => sell(c.id, n)}>
-                    卖出 <Coin size={14} /> {num(n * c.sellPrice)}
+                    {t("sell")} <Coin size={14} /> {num(n * c.sellPrice)}
                   </button>
                 </li>
               );
             })}
           </ul>
           <button className="btn big" onClick={() => stock.forEach((c) => sell(c.id, farm.fruits[c.id - 1]))}>
-            全部卖出，共 {num(worth)} 金币
+            {t("sellAll", { gold: num(worth) })}
           </button>
         </>
       )}
@@ -697,10 +747,10 @@ function Neighbours({ game, go }: { game: Game; go: (id: string) => void }) {
   }, [game]);
   return (
     <>
-      <h2>邻居</h2>
-      <p className="drawer-note">这条链上每一座农场都是你的邻居，不需要加好友。</p>
+      <h2>{t("dockNeighbours")}</h2>
+      <p className="drawer-note">{t("nbNote")}</p>
       {rows.length === 0 ? (
-        <p className="drawer-note">眼下只有你一户。换个账户再开一座，就能互相串门了。</p>
+        <p className="drawer-note">{t("nbEmpty")}</p>
       ) : (
         <ul className="list">
           {rows.map((r) => (
@@ -708,14 +758,12 @@ function Neighbours({ game, go }: { game: Game; go: (id: string) => void }) {
               <button className={`row ${game.visited?.id === r.id ? "on" : ""}`} onClick={() => go(r.id)}>
                 <span className="avatar">{r.view!.level}</span>
                 <span className="row-main">
-                  <b>{r.view!.name || "无名农场"}</b>
-                  <span>
-                    {r.view!.level} 级，{r.view!.land} 块地
-                  </span>
+                  <b>{r.view!.name || t("unnamedFarm")}</b>
+                  <span>{t("nbLevelLand", { level: r.view!.level, land: r.view!.land })}</span>
                 </span>
                 <span className="row-side">
-                  {r.loot > 0 && <i className="pill ripe">{r.loot} 块可摘</i>}
-                  {r.trouble > 0 && <i className="pill">{r.trouble} 块要帮忙</i>}
+                  {r.loot > 0 && <i className="pill ripe">{t("pillSteal", { n: r.loot })}</i>}
+                  {r.trouble > 0 && <i className="pill">{t("pillHelp", { n: r.trouble })}</i>}
                 </span>
               </button>
             </li>
@@ -731,37 +779,30 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
   const d = game.chain!.deployment;
   return (
     <>
-      <h2>规则</h2>
+      <h2>{t("dockRules")}</h2>
       <div className="prose">
-        <p>这里没有服务器。农场是 CKB 上的一个格子，下面每一条都写在合约里，由全网节点验算。合约可以由部署者公开升级（换规则代码，链上可查）；但只要运行的还是这份规则，谁也不能单方面动你的农场，cell 里押的 CKB 只增不减。</p>
+        <p>{t("rulesIntro")}</p>
         <ul>
-          <li>这个世界里 1 个游戏小时是 {span(unit)}，一天 {catalog.hoursPerDay} 小时。</li>
-          <li>播种的时刻取自打包那笔交易的区块，谁也没法谎报。</li>
-          <li>作物会自己长草、生虫、缺水。到收获时每留一样没处理，就少收 {catalog.problemPenaltyPercent}%。</li>
-          <li>熟了的作物，每个邻居每季每块地能摘一次，全部邻居合计最多摘走四成。</li>
-          <li>帮邻居除草、除虫、浇水得 {catalog.expHelp} 点经验，每天前 {catalog.helpExpPerDay} 次有效。</li>
-          <li>每天最多往别人地里放 {catalog.mischiefPerDay} 次草或虫。</li>
-          <li>{catalog.dogLevel} 级起可以喂狗，花 {catalog.dogFoodPrice} 金币管一天，挡住约 {catalog.dogBlockPercent}% 的偷摘。</li>
-          <li>串门不需要对方签名，也动不了规则以外的任何东西。</li>
+          <li>{t("rulesTime", { time: span(unit), hours: catalog.hoursPerDay })}</li>
+          <li>{t("rulesPlantTime")}</li>
+          <li>{t("rulesProblems", { percent: catalog.problemPenaltyPercent })}</li>
+          <li>{t("rulesSteal")}</li>
+          <li>{t("rulesHelp", { exp: catalog.expHelp, n: catalog.helpExpPerDay })}</li>
+          <li>{t("rulesMischief", { n: catalog.mischiefPerDay })}</li>
+          <li>{t("rulesDog", { level: catalog.dogLevel, price: catalog.dogFoodPrice, percent: catalog.dogBlockPercent })}</li>
+          <li>{t("rulesVisit")}</li>
         </ul>
         <p className="mono">
-          合约版本哈希
+          {t("codeVersion")}
           <code>{d.codeHash}</code>
-          农场世界标识
+          {t("worldId")}
           <code>{d.codeScriptHash}</code>
-          我的地址
+          {t("myAddress")}
           <code>{game.address}</code>
         </p>
-        <p>农场格子里押着的 CKB 是你的：这份规则下它只增不减，只有你能收回。收回农场会销毁这座农场连同里面的金币、作物和等级，把 CKB 退回钱包，无法撤销。注意：部署者若升级成恶意规则或销毁代码 cell，可能影响甚至冻结这些 CKB——升级权是真实存在的信任前提。</p>
-        <p>
-          已审计：qwen4-max（2026-11-21），源码审查 + CKB-VM 攻击探针 + 实链验证。
-          <a href="https://github.com/tianlitao/qq-farm/blob/main/AUDIT.md" target="_blank" rel="noreferrer">
-            查看审计报告
-          </a>
-          。模型审计，不等同第三方审计公司；上主网前的待办在报告里逐条列明。
-        </p>
+        <p>{t("rulesClose")}</p>
         <button className="btn small danger" disabled={!!game.busy} onClick={askClose}>
-          收回农场，取回 CKB
+          {t("closeBtn")}
         </button>
       </div>
     </>

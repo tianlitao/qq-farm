@@ -23,6 +23,12 @@ const unit = Number(arg("unit", network === "devnet" ? "30" : "3600"));
 const key = arg("privkey", network === "devnet" ? DEVNET_ACCOUNTS[7].key : undefined);
 if (!key) throw new Error("--privkey is required outside the dev chain");
 if (!(unit >= 1 && unit <= 3600)) throw new Error("--unit must be 1..3600 seconds");
+if (network === "mainnet" && !process.argv.includes("--yes")) {
+  throw new Error(
+    "this deploys to the CKB MAINNET with real CKB at stake. Re-read AUDIT-*.md first, " +
+      "then pass --yes together with a dedicated --privkey (never a throwaway test key).",
+  );
+}
 
 const client = createClient(network);
 const signer = new ccc.SignerCkbPrivateKey(client, key);

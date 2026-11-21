@@ -5,3 +5,6 @@ dist/
 *.log
 # keys of throwaway testnet accounts used by the scripts
 *.key
+
+# dedicated deployer keys live outside git
+keys/

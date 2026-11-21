@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/ccc";
 import deployments from "./deployments.json";
 import devnetScripts from "./devnet-scripts.json";
 
-export type NetworkId = "devnet" | "testnet";
+export type NetworkId = "devnet" | "testnet" | "mainnet";
 
 export interface CellRef {
   txHash: string;
@@ -42,6 +42,13 @@ export const NETWORKS: Record<NetworkId, Network> = {
     headerLag: 6,
     explorer: "https://testnet.explorer.nervos.org",
     faucet: "https://faucet.nervos.org",
+  },
+  mainnet: {
+    id: "mainnet",
+    name: "CKB 主网",
+    rpc: "https://mainnet.ckb.dev/",
+    headerLag: 12,
+    explorer: "https://explorer.nervos.org",
   },
 };
 

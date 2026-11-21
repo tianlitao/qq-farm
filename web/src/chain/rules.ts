@@ -1,6 +1,8 @@
 // The game rules, straight from farm-core (compiled to WASM). The chain runs
 // the same code, so what this module computes is what the script will accept.
 
+import { t } from "../i18n";
+
 export interface CropInfo {
   id: number;
   level: number;
@@ -122,7 +124,7 @@ export const RULE_ERRORS: Record<number, string> = {
 
 export class RuleError extends Error {
   constructor(public code: number) {
-    super(RULE_ERRORS[code] ?? `规则不允许（代码 ${code}）`);
+    super(t(`rule${code}`) === `rule${code}` ? `规则不允许（代码 ${code}）` : t(`rule${code}`));
   }
 }
 
@@ -218,7 +220,7 @@ export function transition(farms: FarmInput[], me: number, now: number, unit: nu
   return { needsOwner: out[0] !== 0, state: out.slice(1) };
 }
 
-/** A farm as the rules see it at `now`. `viewer` is the farm id of a would-be thief. */
+/** A farm as the rules see it at `now`. `viewer` is the would-be thief's owner lock hash. */
 export function view(
   farm: { idBytes: Uint8Array; state: Uint8Array; block?: BlockRef },
   now: number,

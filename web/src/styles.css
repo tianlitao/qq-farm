@@ -507,6 +507,12 @@ h2 {
   gap: 8px;
 }
 
+.lang-toggle {
+  min-width: 52px;
+  background: var(--paper);
+  text-align: center;
+}
+
 .wallet select {
   appearance: none;
   padding: 0 30px 0 14px;

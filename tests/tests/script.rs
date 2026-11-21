@@ -327,9 +327,10 @@ fn thieves_cannot_strip_a_field() {
 fn a_fed_dog_guards_the_farm() {
     let mut w = World::new();
     let ripe = T0 + 2 * HOUR;
-    let bob_id = [BOB; 32];
-    let guarded = plot_where(RADISH, |p| calm(p) && dog_blocks(p, &bob_id));
-    let unguarded = plot_where(RADISH, |p| calm(p) && !dog_blocks(p, &bob_id));
+    // The thief's identity is the visitor farm's owner lock hash.
+    let bob_owner = w.owner(BOB);
+    let guarded = plot_where(RADISH, |p| calm(p) && dog_blocks(p, &bob_owner));
+    let unguarded = plot_where(RADISH, |p| calm(p) && !dog_blocks(p, &bob_owner));
 
     let mut ann = new_farm(&mut w, ANN);
     ann.plots[0] = guarded;

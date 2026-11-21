@@ -91,7 +91,9 @@ fn cycles_full_farm_busy_day() {
 
 #[test]
 fn probe_self_sybil_steal() {
-    // Ann owns both farms; farm 2 steals from farm 1. Is that allowed?
+    // One player, three farms. Stealing is keyed on the OWNER lock hash, so
+    // the first farm's steal consumes the plot's slot for the whole player:
+    // a second farm of the same player cannot steal again this season.
     let mut w = World::new();
     let mut ann = Farm::new(w.owner(1), name("ann"));
     ann.plots[0] = plot_where(RADISH, calm);
@@ -99,13 +101,16 @@ fn probe_self_sybil_steal() {
     let mut ann2 = Farm::new(w.owner(1), name("ann2"));
     ann2.gold = 500;
     let ann2 = w.place(9, &ann2, Some(T0));
+    let mut ann3 = Farm::new(w.owner(1), name("ann3"));
+    ann3.gold = 500;
+    let ann3 = w.place(10, &ann3, Some(T0));
     let ripe = T0 + 2 * HOUR;
     let cells = w.play(&[(&ann, &act::steal(1, 0)), (&ann2, &[])], &[1], Some(ripe), ripe + 5);
-    println!(
-        "self-sybil steal: ann stolen={} ann2 fruits0={}",
-        cells[0].farm().plots[0].stolen,
-        cells[1].farm().fruits[0]
-    );
+    assert_eq!(cells[0].farm().plots[0].stolen, 1);
+    assert_eq!(cells[1].farm().fruits[0], 1);
+    // The second farm of the same player: same identity, same slot — refused.
+    let reason = w.refused(&[(&cells[0], &act::steal(1, 0)), (&ann3, &[])], &[1], Some(ripe + 10));
+    assert_eq!(reason, Error::AlreadyStolen, "same-owner sybil steal must be refused");
 }
 
 #[test]

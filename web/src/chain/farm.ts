@@ -3,13 +3,13 @@
 // Nothing here is trusted by the chain. Every transaction is checked by the
 // farm script, which runs the same rules as `rules.ts`.
 
+import { t } from "../i18n";
 import { ccc } from "@ckb-ccc/ccc";
 import type { Deployment, Network } from "./network";
 import {
   type Action,
   type BlockRef,
   type FarmInput,
-  RULE_ERRORS,
   RuleError,
   encodeActions,
   isVisit,
@@ -43,23 +43,11 @@ export interface Move {
 }
 
 /** Why the farm script rejects a transaction, see contracts/farm/src/main.rs. */
-const SCRIPT_ERRORS: Record<number, string> = {
-  ...RULE_ERRORS,
-  40: "合约读取交易失败",
-  41: "农场脚本参数不对",
-  42: "这不是一个农场格子",
-  43: "农场编号不合法",
-  44: "农场格子必须使用农场锁",
-  45: "农场里的 CKB 不能取出",
-  46: "需要农场主人的签名",
-  47: "链上算出的结果和提交的不一致",
-  48: "新农场必须从初始状态开始",
-  49: "操作数据格式不对",
-  50: "交易输入太多",
-  51: "不能无故动用别人的农场",
-  52: "关闭农场时不能附带操作",
-  53: "区块时间超出范围",
-};
+function scriptError(code: number): string {
+  const key = `err${code}`;
+  const text = t(key);
+  return text === key ? t("errUnknown", { code }) : text;
+}
 
 export class ChainError extends Error {
   constructor(
@@ -78,16 +66,16 @@ function explain(error: unknown): ChainError {
   const code = /error code (-?\d+)/.exec(text);
   if (code) {
     const n = Number(code[1]);
-    return new ChainError(SCRIPT_ERRORS[n] ?? `合约拒绝了这笔交易（代码 ${n}）`, n === 47);
+    return new ChainError(scriptError(n), n === 47);
   }
   if (/Unknown\(|Dead\(|OutPoint|Resolve|Conflict|RBF/i.test(text)) {
-    return new ChainError("农场刚刚被别人动过，已刷新", true);
+    return new ChainError(t("staleRefresh"), true);
   }
   if (/Insufficient|not enough capacity|capacity/i.test(text)) {
-    return new ChainError("钱包里的 CKB 不够支付这笔交易");
+    return new ChainError(t("walletPoor"));
   }
   if (/fetch|network|ECONNREFUSED|Failed to/i.test(text)) {
-    return new ChainError("连不上 CKB 节点");
+    return new ChainError(t("noNode"));
   }
   return new ChainError(text.length > 160 ? `${text.slice(0, 160)}…` : text);
 }
@@ -146,7 +134,7 @@ export class FarmChain {
     const tip = await this.client.getTip();
     const lag = BigInt(this.network.headerLag);
     const header = await this.client.getHeaderByNumber(tip > lag ? tip - lag : 0n);
-    if (!header) throw new ChainError("连不上 CKB 节点");
+    if (!header) throw new ChainError(t("noNode"));
     return { timestamp: Number(header.timestamp / 1000n), hash: header.hash, number: header.number };
   }
 
@@ -245,10 +233,10 @@ export class FarmChain {
         missing = 0;
       } else if (seen && ++missing > 4) {
         // It was in the pool and is gone: something else spent its inputs.
-        throw new ChainError("农场刚刚被别人动过，已刷新", true);
+        throw new ChainError(t("staleRefresh"), true);
       }
     }
-    throw new ChainError("交易迟迟没有上链，请稍后刷新查看");
+    throw new ChainError(t("slowTx"));
   }
 
   /** Creates a farm for the signer. */
@@ -289,7 +277,7 @@ export class FarmChain {
       if ((move.farm === mine.id) === isVisit(move.action)) throw new RuleError(11);
       if (!lists.has(move.farm)) {
         const cell = others.find((f) => f.id === move.farm);
-        if (!cell) throw new ChainError("找不到这个农场", true);
+        if (!cell) throw new ChainError(t("noFarm"), true);
         order.push(cell);
         lists.set(move.farm, []);
       }
@@ -331,7 +319,7 @@ export class FarmChain {
     return { kept, dropped };
   }
 
-  /** Sends the moves as one transaction and waits for it. Returns the farms as they are afterwards. */
+  /** Sends the moves as one or more transactions and waits for them. Returns the farms as they are afterwards. */
   async play(
     signer: ccc.Signer,
     mine: FarmCell,
@@ -340,45 +328,65 @@ export class FarmChain {
     onSent?: (txHash: string) => void,
   ): Promise<{ txHash: string; farms: FarmCell[] }> {
     try {
-      const farms = this.layout(mine, others, moves);
+      // Verification cost grows with the square of the farms per transaction;
+      // keep each transaction to a budget and send the rest right after.
+      const MAX_FARMS_PER_TX = 24;
+      const layoutAll = this.layout(mine, others, moves);
+      const visited = layoutAll.slice(1);
+      const chunks: { cell: FarmCell; actions: Uint8Array }[][] = [];
+      for (let i = 0; i < visited.length; i += MAX_FARMS_PER_TX) {
+        chunks.push(visited.slice(i, i + MAX_FARMS_PER_TX));
+      }
+      if (chunks.length === 0) chunks.push([]);
+
       const clock = await this.clock();
-      const states = this.outcome(farms, clock.timestamp);
+      let mineNow: { cell: FarmCell; actions: Uint8Array } = { cell: mine, actions: layoutAll[0].actions };
+      const results: FarmCell[] = [];
+      let lastTx = "";
 
-      const headerDeps = [...new Set([...farms.map((f) => f.cell.block.hashHex), clock.hash])];
-      const tx = ccc.Transaction.from({ cellDeps: [this.codeDep()], headerDeps });
-      farms.forEach(({ cell, actions }, i) => {
-        tx.inputs.push(
-          ccc.CellInput.from({
-            previousOutput: cell.outPoint,
-            cellOutput: { capacity: cell.capacity, lock: this.farmLock(), type: this.farmType(cell.idBytes) },
-            outputData: hex(cell.state),
-          }),
-        );
-        tx.addOutput(this.farmOutput(cell.idBytes, states[i], cell.capacity), hex(states[i]));
-        if (actions.length > 0) tx.setWitnessArgsAt(i, ccc.WitnessArgs.from({ inputType: hex(actions) }));
-        else tx.setWitnessAt(i, "0x");
-      });
-      // The fee comes from the player's wallet; that input is also what proves
-      // to the farm script that the owner is behind this.
-      await tx.completeFeeBy(signer);
-      const txHash = await signer.sendTransaction(tx);
-      onSent?.(txHash);
-      const block = await this.committed(txHash);
+      for (const chunk of chunks) {
+        const layout = [mineNow, ...chunk];
+        const states = this.outcome(layout, clock.timestamp);
+        const headerDeps = [...new Set([...layout.map((f) => f.cell.block.hashHex), clock.hash])];
+        const tx = ccc.Transaction.from({ cellDeps: [this.codeDep()], headerDeps });
+        layout.forEach(({ cell, actions }, i) => {
+          tx.inputs.push(
+            ccc.CellInput.from({
+              previousOutput: cell.outPoint,
+              cellOutput: { capacity: cell.capacity, lock: this.farmLock(), type: this.farmType(cell.idBytes) },
+              outputData: hex(cell.state),
+            }),
+          );
+          tx.addOutput(this.farmOutput(cell.idBytes, states[i], cell.capacity), hex(states[i]));
+          if (actions.length > 0) tx.setWitnessArgsAt(i, ccc.WitnessArgs.from({ inputType: hex(actions) }));
+          else tx.setWitnessAt(i, "0x");
+        });
+        // The fee comes from the player's wallet; that input is also what proves
+        // to the farm script that the owner is behind this.
+        await tx.completeFeeBy(signer);
+        const txHash = await signer.sendTransaction(tx);
+        lastTx = txHash;
+        onSent?.(txHash);
+        const block = await this.committed(txHash);
 
-      const after = farms.map(({ cell }, i): FarmCell => {
-        this.spent.add(outPointKey(cell.outPoint));
-        const next = {
-          outPoint: { txHash, index: i },
-          capacity: tx.outputs[i].capacity,
-          id: cell.id,
-          idBytes: cell.idBytes,
-          state: states[i],
-          block,
-        };
-        this.fresh.set(cell.id, next);
-        return next;
-      });
-      return { txHash, farms: after };
+        const after = layout.map(({ cell }, i): FarmCell => {
+          this.spent.add(outPointKey(cell.outPoint));
+          const next = {
+            outPoint: { txHash, index: i },
+            capacity: tx.outputs[i].capacity,
+            id: cell.id,
+            idBytes: cell.idBytes,
+            state: states[i],
+            block,
+          };
+          this.fresh.set(cell.id, next);
+          return next;
+        });
+        results.push(...after);
+        // The next chunk starts from the farm as it now is.
+        mineNow = { cell: after[0], actions: new Uint8Array() };
+      }
+      return { txHash: lastTx, farms: results };
     } catch (e) {
       throw explain(e);
     }

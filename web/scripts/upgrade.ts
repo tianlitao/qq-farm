@@ -20,6 +20,12 @@ import { ROOT, arg, readDeployments, writeDeployment } from "./env";
 const network = (arg("network", "devnet") as NetworkId)!;
 const key = arg("privkey", network === "devnet" ? DEVNET_ACCOUNTS[7].key : undefined);
 if (!key) throw new Error("--privkey is required outside the dev chain");
+if (network === "mainnet" && !process.argv.includes("--yes")) {
+  throw new Error(
+    "this upgrades the contract on the CKB MAINNET for every farm. Re-read AUDIT-*.md first, " +
+      "then pass --yes together with the dedicated mainnet key.",
+  );
+}
 
 const deployment = readDeployments()[network];
 if (deployment?.version !== 2) {

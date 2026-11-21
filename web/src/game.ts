@@ -4,6 +4,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { useCcc } from "@ckb-ccc/connector-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { t } from "./i18n";
 import { ChainError, type Clock, type FarmCell, FarmChain, type Move } from "./chain/farm";
 import { DEVNET_ACCOUNTS, NETWORKS, type Deployment, type NetworkId, createClient, deploymentOf } from "./chain/network";
 import { type Catalog, type FarmView, loadRules, view } from "./chain/rules";
@@ -31,6 +32,11 @@ export interface Account {
 /** Test accounts only exist on the dev chain. Everywhere else, the wallet signs. */
 export function accounts(): Account[] {
   return NETWORK === "devnet" ? DEVNET_ACCOUNTS : [];
+}
+
+function networkName(): string {
+  const id = NETWORKS[NETWORK].id;
+  return t(id === "devnet" ? "netDevnet" : id === "testnet" ? "netTestnet" : "netMainnet");
 }
 
 export function useGame() {
@@ -108,7 +114,7 @@ export function useGame() {
       try {
         setCatalog(await loadRules(fetch(wasmUrl)));
         if (!chain) {
-          throw new ChainError(`农场合约还没有部署到${NETWORKS[NETWORK].name}`);
+          throw new ChainError(t("notDeployed", { network: networkName() }));
         }
         let deployed: boolean;
         try {
@@ -117,9 +123,9 @@ export function useGame() {
             new Promise<never>((_, fail) => setTimeout(() => fail(new Error("超时")), 20_000)),
           ]);
         } catch (e) {
-          throw new ChainError(`连不上 ${NETWORKS[NETWORK].rpc}：${e instanceof Error ? e.message : String(e)}`);
+          throw new ChainError(t("rpcFail", { rpc: NETWORKS[NETWORK].rpc, message: e instanceof Error ? e.message : String(e) }));
         }
-        if (!deployed) throw new ChainError(`农场合约不在${NETWORKS[NETWORK].name}上`);
+        if (!deployed) throw new ChainError(t("notOnNetwork", { network: networkName() }));
         if (!cancelled) setPhase({ at: "ready" });
       } catch (e) {
         if (cancelled) return;
@@ -217,7 +223,9 @@ export function useGame() {
       const ahead = withBasket ? preview.get(farm.id) : undefined;
       const cell = ahead ? { idBytes: ahead.idBytes, state: ahead.state } : farm;
       try {
-        return view(cell, now, chain.unit, mine && mine.id !== farm.id ? mine.idBytes : undefined);
+        // The viewer's identity for stealing is its owner lock hash.
+        const viewer = mine && mine.id !== farm.id ? mine.state.slice(1, 33) : undefined;
+        return view(cell, now, chain.unit, viewer);
       } catch {
         return undefined;
       }
@@ -258,7 +266,7 @@ export function useGame() {
         const { farms: after } = await chain.play(signer, mine, farms, kept, () => setBusy("等待区块打包…"));
         setFarms((all) => all.map((f) => after.find((a) => a.id === f.id) ?? f));
         if (!moves) setBasket([]);
-        toast("ok", `已上链，${kept.length} 个操作生效`);
+        toast("ok", t("committed", { n: kept.length }));
       } catch (e) {
         const error = e instanceof ChainError ? e : new ChainError(String(e));
         toast("bad", error.message);
@@ -277,7 +285,7 @@ export function useGame() {
       try {
         const { farm } = await chain.createFarm(signer, name);
         setFarms((all) => [...all.filter((f) => f.id !== farm.id), farm]);
-        toast("ok", "农场开垦好了");
+        toast("ok", t("farmClaimed"));
       } catch (e) {
         toast("bad", e instanceof Error ? e.message : String(e));
       } finally {
@@ -296,7 +304,7 @@ export function useGame() {
       setFarms((all) => all.filter((f) => f.id !== mine.id));
       setBasket([]);
       setVisiting(undefined);
-      toast("ok", "农场已收回，CKB 回到了钱包");
+      toast("ok", t("farmClosed"));
     } catch (e) {
       toast("bad", e instanceof Error ? e.message : String(e));
     } finally {
