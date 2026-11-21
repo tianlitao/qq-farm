@@ -32,7 +32,8 @@
 | 好友系统 | 没有。同一条链上的农场都是邻居，谁都可以去 |
 | 计时 | 取自区块头的时间戳，见下文 |
 | 随机（杂草、虫害、狗拦不拦） | 取自打包播种交易的那个区块的哈希 |
-| 运营方改数值、关服 | 做不到。合约按代码哈希（`data2`）引用，代码 cell 的锁永远打不开，部署者也改不了、删不掉 |
+| 运营方关服、偷走 CKB | 做不到。农场 cell 的 lock 是公开脚本，能做的事只有规则允许的那几样，cell 里押的 CKB 只增不减 |
+| 运营方改规则 | 可以，且公开：代码 cell 用 type id 固定身份、由部署者的锁看守。升级 = 部署者花一次代码 cell 换上新二进制，type id 不变，所有农场原地运行新规则（见下文"升级"）。改了什么、何时改的，链上全部可查 |
 
 网页只是一个方便的客户端。它用的规则代码和合约是同一份 Rust（编译成 WASM），所以页面上显示的"可以做什么"和链上的判定不会不一致。任何人都可以另写一个客户端，或者直接构造交易。
 
@@ -120,28 +121,43 @@ npm run bots                      # 邻居机器人
 npm run build                     # 类型检查并打包
 ```
 
-改了规则就要重新构建合约和 WASM 再重新部署。代码哈希会变，等于开了一个新游戏，旧农场留在旧规则里：这正是"谁也改不了规则"的另一面。
+改了规则就重新构建合约和 WASM，然后原地升级：`npm run build`（合约）→ `bash scripts/build-wasm.sh`（前端 WASM）→ `npm run upgrade`。升级花一次代码 cell 换上新二进制，**type id 不变**，所有农场原地运行新规则，不用重新开垦。规则改动的同步要点：合约与前端 WASM 是同一份 Rust，必须一起重编译，否则前端算出的初始状态会被链上拒绝（例如改了 `INIT_GOLD` 而没重编 WASM，开垦会报"新农场必须从初始状态开始"）。
 
 ### 测试网
 
-合约已经部署在 CKB 测试网上（部署交易 `0x6ffe1f5bafa0858a9fa889e7d93c7993e61d983f927cf3826813a88b855d37d9`，游戏时速 3600 秒/小时）。网页默认跑测试网；跑本地链则在 `web/.env` 里写 `VITE_NETWORK=devnet`。
+合约部署在 CKB 测试网上，采用**可升级的两 cell 结构**：
+
+- **type-id 校验器 cell**：锁是全零哈希（永远打不开），代码 cell 的 type script 就是它。它保证代码 cell 的 type id 只此一份、升级时不会漂移。
+- **代码 cell**：锁是部署者的锁，data 是农场二进制。农场 cell 用 `hash_type: "type"` 引用代码 cell 的 type script 哈希，所以升级后所有农场原地运行新代码。
+
+当前版本：代码 cell 交易 `0x2519aa27af73bc1534dd44c55095b3df531b2dcd410f7f944254736bc8dfef85`，引用哈希（code script hash）`0x0253fea2b3d45853c5381fb20ed7efffce8f79cfbb059e1ea3befddf299f775d`，游戏时速 3600 秒/小时。最新记录以 `web/src/chain/deployments.json` 为准。网页默认跑测试网；跑本地链则在 `web/.env` 里写 `VITE_NETWORK=devnet`。
 
 测试网用 CCC 的钱包连接器登录：网页上是"连接钱包"按钮，支持 JoyID、MetaMask、OKX、UniSat 等。钱包需要有测试网 CKB（[水龙头](https://faucet.nervos.org/)）才能付手续费和创建农场 cell。本地链仍使用内置测试账户，不需要钱包。
 
-合约 cell 需要约 49,000 CKB。重新部署：
+代码 cell 约 49,000 CKB、校验器约 28,500 CKB。首次部署：
 
 ```bash
+bash scripts/build-contract.sh
 cd web
 npx tsx scripts/deploy.ts --network testnet --privkey 0x你的私钥
 ```
 
-默认把代码 cell 锁死（任何人都无法再动它）。加 `--keep-key` 则用你自己的锁，便于回收测试币，但那样你就能销毁合约，不再是去中心化的部署。
+**升级**（改了规则之后）：
+
+```bash
+bash scripts/build-contract.sh && bash scripts/build-wasm.sh
+cd web && npx tsx scripts/upgrade.ts --network testnet --privkey 0x你的私钥
+npm run build && npm run deploy:pages   # 前端记录更新后重新发布网页
+```
+
+注意信任模型：代码 cell 的锁就是升级权限，持有该私钥就能改写所有农场运行的规则（包括理论上影响农场内 CKB 的规则）。这个私钥等同于整个游戏的管理员密钥，请妥善保管。type-id 校验器保证升级只会"换代码"，不会意外改掉 type id，也没有人能伪造第二个代码 cell。
 
 ## 现状与已知限制
 
 已验证的：
 
 - 29 个 Rust 测试全部通过，合约测试跑在真实的 CKB-VM 里。
+- 可升级部署在本地链上完整验证过：改 `INIT_GOLD` 500→600、升级、新农场拿到 600 金币、旧农场照常关闭收回 CKB，再升级回 500 同样生效；全程 type id 不变。
 - `npm run e2e` 在本地节点上通过全部 13 步：开垦、陌生人不能花主人的金币、播种、未熟不能收也不能偷、邻居无需主人签名放草、处理、成熟、偷摘、不能重复偷、收获卖出、伪造状态被合约拒绝、主人收回农场。
 - 网页在浏览器里实际走通了开垦、买种、播种、打理、收获、卖出、串门偷摘。
 - 4 个机器人连续跑了一小时、四百多笔交易，没有失败。

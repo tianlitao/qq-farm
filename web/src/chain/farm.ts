@@ -118,22 +118,27 @@ export class FarmChain {
   }
 
   farmLock(): ccc.Script {
-    return ccc.Script.from({ codeHash: this.deployment.codeHash, hashType: "data2", args: "0x" });
+    return ccc.Script.from({ codeHash: this.deployment.codeScriptHash, hashType: "type", args: "0x" });
   }
 
   farmType(id: Uint8Array): ccc.Script {
     return ccc.Script.from({
-      codeHash: this.deployment.codeHash,
-      hashType: "data2",
+      codeHash: this.deployment.codeScriptHash,
+      hashType: "type",
       args: hex(ccc.bytesConcat(this.unitArgs(), id)),
     });
   }
 
-  /** Is the farm script where the deployment record says it is? */
+  /** Is the code cell where the deployment record says it is, holding the recorded binary? */
   async isDeployed(): Promise<boolean> {
-    const { txHash, index } = this.deployment;
-    const cell = await this.client.getCellLive({ txHash, index }, true);
-    return !!cell && ccc.hashCkb(cell.outputData) === this.deployment.codeHash;
+    const { code, codeScriptHash, codeHash } = this.deployment;
+    const cell = await this.client.getCellLive({ txHash: code.txHash, index: code.index }, true);
+    return (
+      !!cell &&
+      ccc.hashCkb(cell.outputData) === codeHash &&
+      !!cell.cellOutput.type &&
+      ccc.hexFrom(cell.cellOutput.type.hash()) === codeScriptHash
+    );
   }
 
   /** The header transactions use to prove what time it is. */
@@ -165,7 +170,7 @@ export class FarmChain {
   /** Every farm of this world. */
   async listFarms(limit = 300): Promise<FarmCell[]> {
     const key = {
-      script: { codeHash: this.deployment.codeHash, hashType: "data2" as const, args: hex(this.unitArgs()) },
+      script: { codeHash: this.deployment.codeScriptHash, hashType: "type" as const, args: hex(this.unitArgs()) },
       scriptType: "type" as const,
       scriptSearchMode: "prefix" as const,
       withData: true,
@@ -218,7 +223,7 @@ export class FarmChain {
   }
 
   private codeDep(): ccc.CellDepLike {
-    return { outPoint: { txHash: this.deployment.txHash, index: this.deployment.index }, depType: "code" };
+    return { outPoint: { txHash: this.deployment.code.txHash, index: this.deployment.code.index }, depType: "code" };
   }
 
   /** Waits for a transaction to be committed and returns its block. */

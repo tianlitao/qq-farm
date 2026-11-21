@@ -8,6 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "deploy:devnet": "tsx scripts/deploy.ts",
+    "upgrade": "tsx scripts/upgrade.ts",
+    "upgrade:testnet": "tsx scripts/upgrade.ts --network testnet",
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name qq-farm --branch main",
     "bots": "tsx scripts/bots.ts",
     "e2e": "tsx scripts/e2e.ts"

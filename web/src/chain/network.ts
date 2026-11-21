@@ -4,11 +4,20 @@ import devnetScripts from "./devnet-scripts.json";
 
 export type NetworkId = "devnet" | "testnet";
 
-export interface Deployment {
-  /** The cell holding the farm script's code. */
+export interface CellRef {
   txHash: string;
   index: number;
-  /** blake2b of the code; farm scripts refer to it with hash type data2. */
+}
+
+export interface Deployment {
+  version: 2;
+  /** The immutable type-id validator: the type script of the code cell. */
+  validator: CellRef;
+  /** The upgradable farm-code cell: spending it with new code upgrades the game. */
+  code: CellRef;
+  /** Hash of the code cell's type script; farm cells reference the code by it, with hash type "type". */
+  codeScriptHash: string;
+  /** blake2b of the code cell's data (the running binary), to spot a stale record. */
   codeHash: string;
   /** Seconds per game hour: which world the app plays in. */
   unit: number;
@@ -37,7 +46,7 @@ export const NETWORKS: Record<NetworkId, Network> = {
 };
 
 export function deploymentOf(network: NetworkId): Deployment | undefined {
-  return (deployments as Partial<Record<NetworkId, Deployment>>)[network];
+  return (deployments as unknown as Partial<Record<NetworkId, Deployment>>)[network];
 }
 
 export function createClient(network: NetworkId): ccc.Client {

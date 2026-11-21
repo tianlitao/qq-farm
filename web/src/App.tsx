@@ -745,8 +745,10 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
           <li>串门不需要对方签名，也动不了规则以外的任何东西。</li>
         </ul>
         <p className="mono">
-          合约代码哈希
+          合约版本哈希
           <code>{d.codeHash}</code>
+          农场世界标识
+          <code>{d.codeScriptHash}</code>
           我的地址
           <code>{game.address}</code>
         </p>

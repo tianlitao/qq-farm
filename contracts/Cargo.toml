@@ -1,7 +1,7 @@
 # The on-chain script. Built for CKB-VM (riscv64) only, see scripts/build-contract.sh.
 [workspace]
 resolver = "2"
-members = ["farm"]
+members = ["farm", "type-id"]
 
 [profile.release]
 overflow-checks = true
