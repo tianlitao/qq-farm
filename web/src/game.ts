@@ -2,6 +2,7 @@
 // and what the farms will look like once they are.
 
 import { ccc } from "@ckb-ccc/ccc";
+import { useCcc } from "@ckb-ccc/connector-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChainError, type Clock, type FarmCell, FarmChain, type Move } from "./chain/farm";
 import { DEVNET_ACCOUNTS, NETWORKS, type NetworkId, createClient, deploymentOf } from "./chain/network";
@@ -20,25 +21,16 @@ export type Phase =
   | { at: "ready" };
 
 const NETWORK: NetworkId = (import.meta.env.VITE_NETWORK as NetworkId) || "devnet";
-const BURNER_KEY = "ckb-farm.burner-key";
 const ACCOUNT_KEY = "ckb-farm.account";
-
-function burnerKey(): string {
-  let key = localStorage.getItem(BURNER_KEY);
-  if (!key) {
-    key = ccc.hexFrom(crypto.getRandomValues(new Uint8Array(32)));
-    localStorage.setItem(BURNER_KEY, key);
-  }
-  return key;
-}
 
 export interface Account {
   label: string;
   key: string;
 }
 
+/** Test accounts only exist on the dev chain. Everywhere else, the wallet signs. */
 export function accounts(): Account[] {
-  return NETWORK === "devnet" ? DEVNET_ACCOUNTS : [{ label: "浏览器钱包", key: burnerKey() }];
+  return NETWORK === "devnet" ? DEVNET_ACCOUNTS : [];
 }
 
 export function useGame() {
@@ -48,6 +40,7 @@ export function useGame() {
     const saved = Number(localStorage.getItem(ACCOUNT_KEY) ?? 0);
     return saved < accounts().length ? saved : 0;
   });
+  const { signerInfo, open: openWallet, disconnect } = useCcc();
   const [farms, setFarms] = useState<FarmCell[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [clock, setClock] = useState<Clock>();
@@ -67,10 +60,11 @@ export function useGame() {
     return deployment ? new FarmChain(createClient(NETWORK), NETWORKS[NETWORK], deployment) : undefined;
   }, []);
 
-  const signer = useMemo(
-    () => (chain ? new ccc.SignerCkbPrivateKey(chain.client, accounts()[accountIndex].key) : undefined),
-    [chain, accountIndex],
-  );
+  const signer = useMemo(() => {
+    if (!chain) return undefined;
+    if (NETWORK !== "devnet") return signerInfo?.signer;
+    return new ccc.SignerCkbPrivateKey(chain.client, accounts()[accountIndex].key);
+  }, [chain, accountIndex, signerInfo]);
 
   const toast = useCallback((kind: Toast["kind"], text: string) => {
     const id = ++toastId.current;
@@ -99,14 +93,18 @@ export function useGame() {
         }
         let deployed: boolean;
         try {
-          deployed = await chain.isDeployed();
-        } catch {
-          throw new ChainError(`连不上 ${NETWORKS[NETWORK].rpc}`);
+          deployed = await Promise.race([
+            chain.isDeployed(),
+            new Promise<never>((_, fail) => setTimeout(() => fail(new Error("超时")), 20_000)),
+          ]);
+        } catch (e) {
+          throw new ChainError(`连不上 ${NETWORKS[NETWORK].rpc}：${e instanceof Error ? e.message : String(e)}`);
         }
         if (!deployed) throw new ChainError(`农场合约不在${NETWORKS[NETWORK].name}上`);
         if (!cancelled) setPhase({ at: "ready" });
       } catch (e) {
         if (cancelled) return;
+        console.error("[farm] startup failed", e);
         const why = e instanceof Error ? e.message : String(e);
         const hint =
           NETWORK === "devnet"
@@ -118,7 +116,7 @@ export function useGame() {
     return () => {
       cancelled = true;
     };
-  }, [chain]);
+  }, [chain, toast]);
 
   // Who is playing.
   useEffect(() => {
@@ -126,6 +124,8 @@ export function useGame() {
     let cancelled = false;
     setOwner(undefined);
     setLoaded(false);
+    setAddress(undefined);
+    setBalance(undefined);
     setBasket([]);
     setVisiting(undefined);
     localStorage.setItem(ACCOUNT_KEY, String(accountIndex));
@@ -311,6 +311,7 @@ export function useGame() {
     send,
     create,
     close,
+    wallet: { connected: !!signer, open: openWallet, disconnect },
     busy,
     toasts,
     toast,

@@ -11,10 +11,13 @@ import type { FarmCell, Move } from "../src/chain/farm";
 import { ChainError } from "../src/chain/farm";
 import { type FarmView, type PlotView, KIND_WEED, rules, view } from "../src/chain/rules";
 import { account, openChain, sleep } from "./env";
+import { keyFrom } from "./wallet";
 
-const chain = await openChain("devnet");
-const ann = account(chain.client, 6);
-const bob = account(chain.client, 7);
+const network = (process.env.FARM_NETWORK as "devnet" | "testnet") || "devnet";
+const chain = await openChain(network);
+const ann = network === "devnet" ? account(chain.client, 6) : new ccc.SignerCkbPrivateKey(chain.client, keyFrom("../.testnet-deployer.key"));
+// A second key file gives the testnet visitor its own farm.
+const bob = network === "devnet" ? account(chain.client, 7) : new ccc.SignerCkbPrivateKey(chain.client, keyFrom("../.testnet-visitor.key"));
 const RADISH = 1;
 
 let step = 0;
@@ -66,6 +69,14 @@ async function waitUntil(seconds: number) {
 
 const plot = (v: FarmView, i: number) => v.plots[i] as PlotView;
 
+if (network === "testnet") {
+  for (const signer of [ann, bob]) {
+    const address = await signer.getRecommendedAddress();
+    const balance = Number((await signer.getBalance()) / 100_000_000n);
+    if (balance < 1000) throw new Error(`${address} needs testnet CKB from https://faucet.nervos.org`);
+    console.log(`${address}: ${balance} CKB`);
+  }
+}
 assert.ok(await chain.isDeployed(), "the farm script is not where deployments.json says");
 say(`farm script found, game hour ${chain.unit}s`);
 

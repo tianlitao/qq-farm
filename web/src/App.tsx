@@ -65,7 +65,7 @@ export function App() {
   const [seed, setSeed] = useState(1);
   const [tool, setTool] = useState<VisitTool>("hand");
 
-  if (game.phase.at === "loading" || (game.phase.at === "ready" && !game.loaded)) {
+  if (game.phase.at === "loading") {
     return (
       <Shell game={game}>
         <p className="notice">正在读取链上的田地…</p>
@@ -298,16 +298,22 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
           </div>
         )}
         <div className="wallet">
-          <label>
-            <span className="sr">账户</span>
-            <select value={game.accountIndex} onChange={(e) => game.setAccountIndex(Number(e.target.value))} disabled={!!game.busy}>
-              {game.accounts.map((a, i) => (
-                <option key={a.key} value={i}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {game.accounts.length > 0 ? (
+            <label>
+              <span className="sr">账户</span>
+              <select value={game.accountIndex} onChange={(e) => game.setAccountIndex(Number(e.target.value))} disabled={!!game.busy}>
+                {game.accounts.map((a, i) => (
+                  <option key={a.key} value={i}>
+                    {a.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <button className="btn small" onClick={() => (game.wallet.connected ? game.wallet.disconnect() : game.wallet.open())}>
+              {game.wallet.connected ? "断开钱包" : "连接钱包"}
+            </button>
+          )}
           <span className="ckb" title={game.address}>
             {ckb} CKB
           </span>
@@ -329,6 +335,7 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
 function Claim({ game }: { game: Game }) {
   const [name, setName] = useState("");
   const poor = game.balance !== undefined && game.balance < 400n * 100_000_000n;
+  const noWallet = game.accounts.length === 0 && !game.wallet.connected;
   return (
     <form
       className="card claim"
@@ -348,10 +355,17 @@ function Claim({ game }: { game: Game }) {
         农场的名字
       </label>
       <input id="farm-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="我的农场" maxLength={18} autoFocus />
-      <button className="btn big" disabled={!!game.busy || poor}>
-        {game.busy ?? "开垦农场"}
-      </button>
-      {poor && (
+      {noWallet ? (
+        <button className="btn big" onClick={game.wallet.open}>
+          连接钱包
+        </button>
+      ) : (
+        <button className="btn big" disabled={!!game.busy || poor}>
+          {game.busy ?? "开垦农场"}
+        </button>
+      )}
+      {noWallet && <p className="drawer-note">连接 CCC 支持的钱包后就能开垦，JoyID、MetaMask 等都可以。</p>}
+      {!noWallet && poor && (
         <p className="warn">
           这个账户的 CKB 不够。{game.network.faucet ? <a href={game.network.faucet} target="_blank" rel="noreferrer">去水龙头领取测试币</a> : "换一个测试账户试试。"}
           {game.address && <code>{game.address}</code>}

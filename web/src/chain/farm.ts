@@ -80,7 +80,7 @@ function explain(error: unknown): ChainError {
     const n = Number(code[1]);
     return new ChainError(SCRIPT_ERRORS[n] ?? `合约拒绝了这笔交易（代码 ${n}）`, n === 47);
   }
-  if (/Unknown\(|Dead\(|OutPoint|Resolve|Conflict|RBFRejected/i.test(text)) {
+  if (/Unknown\(|Dead\(|OutPoint|Resolve|Conflict|RBF/i.test(text)) {
     return new ChainError("农场刚刚被别人动过，已刷新", true);
   }
   if (/Insufficient|not enough capacity|capacity/i.test(text)) {

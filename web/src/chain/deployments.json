@@ -4,5 +4,11 @@
     "index": 0,
     "codeHash": "0xe80a23f18da7ca31fee294ef8784ff3077daa3546f9d36ec7ed57c5ef9566320",
     "unit": 30
+  },
+  "testnet": {
+    "txHash": "0x6ffe1f5bafa0858a9fa889e7d93c7993e61d983f927cf3826813a88b855d37d9",
+    "index": 0,
+    "codeHash": "0xe80a23f18da7ca31fee294ef8784ff3077daa3546f9d36ec7ed57c5ef9566320",
+    "unit": 3600
   }
 }

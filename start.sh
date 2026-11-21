@@ -11,10 +11,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${ROOT}"
 
 stop_bots() {
-    if [ -f devnet/bots.pid ]; then
-        kill "$(cat devnet/bots.pid)" 2>/dev/null || true
-        rm -f devnet/bots.pid
+    if [ -f "${ROOT}/devnet/bots.pid" ]; then
+        kill "$(cat "${ROOT}/devnet/bots.pid")" 2>/dev/null || true
+        rm -f "${ROOT}/devnet/bots.pid"
     fi
+    # npm does not pass the signal on to the node processes under it, and two
+    # sets of bots on the same accounts fight over the same cells.
+    pkill -f "${ROOT}/web/node_modules/.*scripts/bots\.ts" 2>/dev/null || true
 }
 
 if [ "${1:-}" = "stop" ]; then
