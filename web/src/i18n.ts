@@ -21,9 +21,8 @@ const listeners = new Set<() => void>();
 function apply() {
   if (typeof document === "undefined") return;
   document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.title = t("pageTitle");
 }
-
-if (typeof document !== "undefined") apply();
 
 export function setLang(next: Lang) {
   lang = next;
@@ -62,6 +61,8 @@ const zh: Record<string, string> = {
   netDevnet: "本地开发链",
   netTestnet: "CKB 测试网",
   netMainnet: "CKB 主网",
+  brand: "垄上",
+  pageTitle: "垄上 · CKB 链上农场",
   brandSub: "{network}上的农场",
   levelWord: "级",
   timeH: "小时",
@@ -285,6 +286,8 @@ const en: Record<string, string> = {
   netDevnet: "local devnet",
   netTestnet: "the CKB testnet",
   netMainnet: "the CKB mainnet",
+  brand: "Ridge",
+  pageTitle: "Ridge · a farm on CKB",
   brandSub: "a farm on {network}",
   levelWord: "Lv",
   timeH: "h",
@@ -510,3 +513,5 @@ const dict: Record<Lang, Record<string, string>> = { zh, en };
 export function cropName(id: number): string {
   return t(`crop${id}`);
 }
+
+if (typeof document !== "undefined") apply();

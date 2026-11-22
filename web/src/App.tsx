@@ -346,7 +346,7 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
               />
             </svg>
           </span>
-          <span className="brand-name">垄上</span>
+          <span className="brand-name">{t("brand")}</span>
           <span className="brand-sub">{t("brandSub", { network: t(game.network.id === "devnet" ? "netDevnet" : game.network.id === "testnet" ? "netTestnet" : "netMainnet") })}</span>
         </div>
         {farm && (
