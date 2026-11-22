@@ -97,15 +97,98 @@ export function useGame() {
     setTimeout(() => setToasts((all) => all.filter((t) => t.id !== id)), kind === "bad" ? 6000 : 3500);
   }, []);
 
-  const refresh = useCallback(async () => {
+  // Upserts cells into the farm list, keeping everything already known (a
+  // farm found outside the neighbours scan must not be dropped by it).
+  const upsert = useCallback((cells: FarmCell[]) => {
+    setFarms((all) => {
+      const map = new Map(all.map((f) => [f.id, f]));
+      for (const cell of cells) map.set(cell.id, cell);
+      return [...map.values()];
+    });
+  }, []);
+
+  // Full neighbour scan. Runs on demand (drawer open, load more) and once at
+  // boot as the fallback for farm discovery.
+  const refreshNeighbours = useCallback(
+    async (limit: number) => {
+      if (!chain || !signer) return;
+      const [list, now, bal] = await Promise.all([chain.listFarms(limit), chain.clock(), chain.balance(signer)]);
+      upsert(list);
+      setClock(now);
+      setClockAt(Date.now());
+      setBalance(bal);
+      setLoaded(true);
+    },
+    [chain, signer, upsert],
+  );
+
+  // Cheap poll: clock, balance, and the live cells the player is looking at —
+  // their own farm, and the one being visited. Never scans the whole world.
+  const mineOut = useRef<{ txHash: string; index: number } | undefined>(undefined);
+  const visitedOut = useRef<{ txHash: string; index: number } | undefined>(undefined);
+  const refreshCheap = useCallback(async () => {
     if (!chain || !signer) return;
-    const [list, now, bal] = await Promise.all([chain.listFarms(), chain.clock(), chain.balance(signer)]);
-    setFarms(list);
+    const [now, bal] = await Promise.all([chain.clock(), chain.balance(signer)]);
     setClock(now);
     setClockAt(Date.now());
     setBalance(bal);
-    setLoaded(true);
-  }, [chain, signer]);
+    const refs = [mineOut.current, visitedOut.current].filter((r) => r !== undefined) as { txHash: string; index: number }[];
+    const cells = await Promise.all(refs.map((ref) => chain.client.getCellLive(ref, true).catch(() => undefined)));
+    const converted: FarmCell[] = [];
+    for (const cell of cells) {
+      const farm = cell && (await chain.cellToFarmCell(cell));
+      if (farm) converted.push(farm);
+    }
+    if (converted.length !== refs.length) {
+      // A watched cell vanished: resync from a full scan.
+      await refreshNeighbours(300);
+      return;
+    }
+    upsert(converted);
+  }, [chain, signer, refreshNeighbours, upsert]);
+
+  // Farm discovery, in three tiers: a cached outpoint (one RPC), a data-prefix
+  // indexer search (one RPC, exact), and the full scan as the last resort.
+  useEffect(() => {
+    if (phase.at !== "ready" || !chain || !owner) return;
+    const key = `ckb-farm.mine.${NETWORK}.${owner}`;
+    const ownerBytes = ccc.bytesFrom(`0x${owner}`);
+    let cancelled = false;
+    (async () => {
+      const cached = localStorage.getItem(key);
+      if (cached) {
+        try {
+          const ref = JSON.parse(cached) as { txHash: string; index: number };
+          const cell = await chain.client.getCellLive(ref, true).catch(() => undefined);
+          const farm = cell && (await chain.cellToFarmCell(cell));
+          if (farm && ccc.hexFrom(farm.state.slice(1, 33)).slice(2) === owner) {
+            if (!cancelled) {
+              mineOut.current = ref;
+              upsert([farm]);
+            }
+            return;
+          }
+          localStorage.removeItem(key);
+        } catch {
+          localStorage.removeItem(key);
+        }
+      }
+      const found = await chain.findFarmByOwner(ownerBytes).catch(() => undefined);
+      if (found) {
+        if (!cancelled) {
+          mineOut.current = found.outPoint;
+          localStorage.setItem(key, JSON.stringify(found.outPoint));
+          upsert([found]);
+        }
+        return;
+      }
+      // No farm found by the fast paths: confirm absence with a full scan.
+      if (!cancelled) await refreshNeighbours(300);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [phase.at, chain, owner, upsert, refreshNeighbours]);
 
   // Start: rules, node, deployment.
   useEffect(() => {
@@ -165,12 +248,13 @@ export function useGame() {
     };
   }, [chain, signer, accountIndex]);
 
-  // Keep up with the chain.
+  // Keep up with the chain: the cheap poll every few seconds, a full
+  // neighbour scan only when something asks for it.
   useEffect(() => {
     if (phase.at !== "ready" || busy) return;
     let stop = false;
     const tick = () => {
-      if (!stop && !document.hidden) refresh().catch(() => {});
+      if (!stop && !document.hidden) refreshCheap().catch(() => {});
     };
     tick();
     const timer = setInterval(tick, 4000);
@@ -178,7 +262,7 @@ export function useGame() {
       stop = true;
       clearInterval(timer);
     };
-  }, [phase.at, busy, refresh]);
+  }, [phase.at, busy, refreshCheap]);
 
   // A clock that moves between blocks. Never ahead of what the next block can prove by much.
   const [, setBeat] = useState(0);
@@ -195,6 +279,13 @@ export function useGame() {
   }, [farms, owner, catalog]);
 
   const visited = visiting ? farms.find((f) => f.id === visiting) : undefined;
+  const visit = useCallback(
+    (id: string | undefined) => {
+      setVisiting(id);
+      visitedOut.current = id ? farms.find((f) => f.id === id)?.outPoint : undefined;
+    },
+    [farms],
+  );
 
   // The basket, checked against the rules at the time the chain can prove.
   const sifted = useMemo(() => {
@@ -264,7 +355,9 @@ export function useGame() {
       setBusy("正在签名…");
       try {
         const { farms: after } = await chain.play(signer, mine, farms, kept, () => setBusy("等待区块打包…"));
-        setFarms((all) => all.map((f) => after.find((a) => a.id === f.id) ?? f));
+        upsert(after);
+        mineOut.current = after[0].outPoint;
+        if (owner) localStorage.setItem(`ckb-farm.mine.${NETWORK}.${owner}`, JSON.stringify(after[0].outPoint));
         if (!moves) setBasket([]);
         toast("ok", t("committed", { n: kept.length }));
       } catch (e) {
@@ -272,10 +365,10 @@ export function useGame() {
         toast("bad", error.message);
       } finally {
         setBusy(undefined);
-        refresh().catch(() => {});
+        await refreshCheap().catch(() => {});
       }
     },
-    [chain, signer, mine, farms, basket, proven, busy, toast, refresh],
+    [chain, signer, mine, farms, basket, proven, busy, toast, refreshCheap, owner, upsert],
   );
 
   const create = useCallback(
@@ -285,15 +378,17 @@ export function useGame() {
       try {
         const { farm } = await chain.createFarm(signer, name);
         setFarms((all) => [...all.filter((f) => f.id !== farm.id), farm]);
+        mineOut.current = farm.outPoint;
+        if (owner) localStorage.setItem(`ckb-farm.mine.${NETWORK}.${owner}`, JSON.stringify(farm.outPoint));
         toast("ok", t("farmClaimed"));
       } catch (e) {
         toast("bad", e instanceof Error ? e.message : String(e));
       } finally {
         setBusy(undefined);
-        refresh().catch(() => {});
+        await refreshCheap().catch(() => {});
       }
     },
-    [chain, signer, busy, toast, refresh],
+    [chain, signer, busy, toast, refreshCheap, owner],
   );
 
   const close = useCallback(async () => {
@@ -304,14 +399,16 @@ export function useGame() {
       setFarms((all) => all.filter((f) => f.id !== mine.id));
       setBasket([]);
       setVisiting(undefined);
+      mineOut.current = undefined;
+      if (owner) localStorage.removeItem(`ckb-farm.mine.${NETWORK}.${owner}`);
       toast("ok", t("farmClosed"));
     } catch (e) {
       toast("bad", e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(undefined);
-      refresh().catch(() => {});
+      await refreshCheap().catch(() => {});
     }
-  }, [chain, signer, mine, busy, toast, refresh]);
+  }, [chain, signer, mine, busy, toast, refreshCheap, owner]);
 
   return {
     network: NETWORKS[NETWORK],
@@ -327,7 +424,8 @@ export function useGame() {
     loaded,
     mine,
     visited,
-    visit: setVisiting,
+    visit,
+    refreshNeighbours,
     now,
     look,
     basket,

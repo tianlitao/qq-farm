@@ -129,6 +129,65 @@ export class FarmChain {
     );
   }
 
+  /**
+   * Converts a live cell (as the indexer returns it) into a FarmCell, if it is
+   * one of ours: right type script, right args prefix. Caches its block.
+   */
+  async cellToFarmCell(cell: ccc.Cell): Promise<FarmCell | undefined> {
+    const type = cell.cellOutput.type;
+    if (!type || ccc.hexFrom(type.codeHash) !== this.deployment.codeScriptHash) return undefined;
+    const args = ccc.bytesFrom(type.args);
+    if (args.length < 4 + 32 || ccc.hexFrom(args.slice(0, 4)) !== ccc.hexFrom(this.unitArgs())) return undefined;
+    const state = typeof cell.outputData === "string" ? ccc.bytesFrom(cell.outputData) : cell.outputData;
+    const block = await this.blockOf(cell.outPoint.txHash);
+    if (!block) return undefined;
+    const idBytes = args.slice(4);
+    const farmCell: FarmCell = {
+      outPoint: { txHash: cell.outPoint.txHash, index: Number(cell.outPoint.index) },
+      capacity: cell.cellOutput.capacity,
+      id: ccc.hexFrom(idBytes),
+      idBytes,
+      state,
+      block,
+    };
+    this.fresh.set(farmCell.id, farmCell);
+    return farmCell;
+  }
+
+  /**
+   * Finds the farm owned by `owner` (a wallet lock hash) directly: the farm
+   * state begins with `[version, owner…]`, so a data-prefix search pins it
+   * down in one indexer query — no global scan, no 300-farm ceiling. Returns
+   * undefined when the indexer cannot serve data filters (then the caller
+   * falls back to the full scan) or when the player has no farm.
+   */
+  async findFarmByOwner(owner: Uint8Array): Promise<FarmCell | undefined> {
+    try {
+      const dataPrefix = ccc.hexFrom(ccc.bytesConcat(new Uint8Array([1]), owner));
+      for await (const cell of this.client.findCellsOnChain(
+        {
+          script: { codeHash: this.deployment.codeScriptHash, hashType: "type", args: ccc.hexFrom(this.unitArgs()) },
+          scriptType: "type",
+          scriptSearchMode: "prefix",
+          filter: { outputData: dataPrefix, outputDataSearchMode: "prefix" },
+          withData: true,
+        },
+        "asc",
+        10,
+      )) {
+        const farm = await this.cellToFarmCell(cell);
+        if (!farm) continue;
+        if (!farm.state.slice(1, 33).every((b, i) => b === owner[i])) continue;
+        return farm;
+      }
+      return undefined;
+    } catch {
+      // An indexer without data filtering errors out or returns nothing;
+      // the caller then falls back to the full scan.
+      return undefined;
+    }
+  }
+
   /** The header transactions use to prove what time it is. */
   async clock(): Promise<Clock> {
     const tip = await this.client.getTip();

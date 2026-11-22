@@ -191,6 +191,8 @@ const zh: Record<string, string> = {
   nbLevelLand: "{level} 级，{land} 块地",
   pillSteal: "{n} 块可摘",
   pillHelp: "{n} 块要帮忙",
+  loadMore: "加载更多农场",
+  loadedCount: "已加载 {n} 座农场",
 
   rulesIntro:
     "这里没有服务器。农场是 CKB 上的一个格子，下面每一条都写在合约里，由全网节点验算。代码 cell 由部署者的锁看守，升级会留在链上历史里可查。",
@@ -415,6 +417,8 @@ const en: Record<string, string> = {
   nbLevelLand: "level {level}, {land} plots",
   pillSteal: "{n} pickable",
   pillHelp: "{n} need help",
+  loadMore: "Load more farms",
+  loadedCount: "{n} farms loaded",
 
   rulesIntro:
     "There is no server here. A farm is a cell on CKB, and every rule below lives in the contract, checked by the whole network. The code cell is guarded by the deployer's lock, and upgrades stay visible in chain history.",

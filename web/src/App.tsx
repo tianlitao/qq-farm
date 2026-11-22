@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bug, Coin, CropIcon, Dog, Drop, Plant, type Stage, Weed } from "./art/crops";
 import { SceneBackdrop } from "./art/scene";
 import { t, useLang, cropName } from "./i18n";
@@ -729,6 +729,11 @@ function Barn({ catalog, farm, sell }: { catalog: Catalog; farm: FarmView; sell:
 }
 
 function Neighbours({ game, go }: { game: Game; go: (id: string) => void }) {
+  const [limit, setLimit] = useState(100);
+  // The neighbours are a global scan: refresh on demand, not every tick.
+  useEffect(() => {
+    game.refreshNeighbours(limit).catch(() => {});
+  }, [game, limit]);
   const rows = useMemo(() => {
     return game.farms
       .filter((f) => f.id !== game.mine?.id)
@@ -769,6 +774,12 @@ function Neighbours({ game, go }: { game: Game; go: (id: string) => void }) {
             </li>
           ))}
         </ul>
+      )}
+      <p className="drawer-note">{t("loadedCount", { n: rows.length })}</p>
+      {rows.length > 0 && (
+        <button className="btn big" onClick={() => setLimit((n) => n + 100)}>
+          {t("loadMore")}
+        </button>
       )}
     </>
   );
