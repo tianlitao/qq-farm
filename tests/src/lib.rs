@@ -26,6 +26,8 @@ pub const T0: u32 = 1_800_000_000;
 const WALLET_CKB: u64 = 1_000;
 /// What a signer pays per transaction: covers fees and a growing farm cell.
 const SPEND_CKB: u64 = 100;
+/// What closing a farm costs its owner, in shannons: a plain fee.
+const CLOSE_FEE: u64 = 10_000;
 
 pub fn encode(farm: &Farm) -> Vec<u8> {
     let mut out = [0u8; MAX_STATE_LEN];
@@ -294,13 +296,26 @@ impl World {
                 }
             }
         }
+        // Whoever closes a farm gets the deposit back in full but for the fee:
+        // the script holds a close to that.
+        let mut closers: Vec<u8> = Vec::new();
+        for ((cell, _), output) in draft.farms.iter().zip(&draft.outputs) {
+            if output.is_none() {
+                let owner = cell.farm().owner;
+                closers.extend(draft.signers.iter().copied().filter(|&p| self.owner(p) == owner));
+            }
+        }
         for &player in &draft.signers {
             let wallet = CellOutput::new_builder()
                 .capacity(Capacity::bytes(WALLET_CKB as usize).unwrap().pack())
                 .lock(self.wallet(player))
                 .build();
             let out_point = self.ctx.create_cell(wallet.clone(), Bytes::new());
-            let change = Capacity::bytes((WALLET_CKB - SPEND_CKB) as usize).unwrap();
+            let change = if closers.contains(&player) {
+                Capacity::shannons(WALLET_CKB * 100_000_000 - CLOSE_FEE)
+            } else {
+                Capacity::bytes((WALLET_CKB - SPEND_CKB) as usize).unwrap()
+            };
             tx = tx
                 .input(CellInput::new(out_point, 0))
                 .output(wallet.as_builder().capacity(change.pack()).build())

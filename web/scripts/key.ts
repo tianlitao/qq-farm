@@ -10,19 +10,16 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { NETWORKS, type NetworkId } from "../src/chain/network";
+import { createClient, type NetworkId } from "../src/chain/network";
 import { arg, WEB } from "./env";
 
-const name = arg("name") ?? arg("1") ?? "deployer";
+const name = arg("name") ?? process.argv.slice(2).filter((a, i, all) => !a.startsWith("--") && all[i - 1] !== "--name" && all[i - 1] !== "--network" && a !== "new" && a !== "info")[0] ?? "deployer";
 const keysDir = resolve(WEB, "keys");
 mkdirSync(keysDir, { recursive: true });
 const file = resolve(keysDir, `${name}.key`);
 
 const network = (arg("network", "testnet") as NetworkId)!;
-const client = new ccc.ClientPublicTestnet({
-  url: NETWORKS[network].rpc,
-  fallbacks: [],
-});
+const client = createClient(network);
 
 function load(): string {
   if (!existsSync(file)) throw new Error(`${file} does not exist yet: npm run key:new -- ${name}`);

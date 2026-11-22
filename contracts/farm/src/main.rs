@@ -30,7 +30,7 @@ use ckb_std::{
     error::SysError,
     high_level::{
         load_cell_capacity, load_cell_data, load_cell_lock, load_cell_lock_hash, load_cell_type,
-        load_header, load_script, load_witness, QueryIter,
+        load_cell_type_hash, load_header, load_script, load_witness, QueryIter,
     },
     type_id::check_type_id,
 };
@@ -54,6 +54,10 @@ const E_TOO_MANY_INPUTS: i8 = 50;
 const E_NOTHING_HAPPENED: i8 = 51;
 const E_CLOSE_WITH_ACTIONS: i8 = 52;
 const E_TIME: i8 = 53;
+
+/// The most a closing transaction may keep back from the owner as its fee, in
+/// shannons (1 CKB). Real fees are a few thousand shannons.
+const CLOSE_FEE_ALLOWANCE: i128 = 100_000_000;
 
 const UNIT_LEN: usize = 4;
 const TYPE_ARGS_LEN: usize = UNIT_LEN + 32;
@@ -113,7 +117,7 @@ fn check_type(me: &Script, args: &[u8]) -> Result<(), i8> {
     match (present(Source::GroupInput)?, present(Source::GroupOutput)?) {
         (false, true) => create(me),
         (true, true) => update(me, args, unit),
-        (true, false) => close(),
+        (true, false) => close(me),
         (false, false) => Err(E_SYSCALL),
     }
 }
@@ -127,27 +131,67 @@ fn check_output_lock(me: &Script) -> Result<(), i8> {
     Ok(())
 }
 
-/// Net capacity the owner SPENDS across this transaction: owner-locked inputs
-/// minus owner-locked outputs. Owner authorization needs a *direction*, not
-/// mere presence — a plain presence check would let anyone-can-pay locks
-/// (spendable without a signature as long as capacity stays put) authorize
-/// actions the owner never saw.
+/// What the owner's lock has at stake in this transaction.
+struct OwnerFlow {
+    /// One of the inputs is locked by the owner. For a lock that wants a
+    /// signature this is the owner's consent to the whole transaction.
+    present: bool,
+    /// Net capacity the owner SPENDS: owner-locked inputs minus owner-locked
+    /// outputs.
+    spent: i128,
+}
+
+/// Owner authorization needs the owner's input *and* a direction. Presence
+/// alone would let anyone-can-pay locks (spendable without a signature as long
+/// as capacity stays put) authorize actions the owner never saw; direction
+/// alone would let a stranger authorize a close by sending the owner a tip.
 ///
-/// * owner actions and creation: the owner must pay (spend > 0);
-/// * closing: the owner must gain (spend < 0), the deposit flows home.
-fn owner_net(owner: &[u8; 32]) -> Result<i128, i8> {
-    let mut net: i128 = 0;
+/// * owner actions and creation: the owner must pay (spent > 0, which needs an
+///   owner input);
+/// * closing: an owner input, and the deposit flows home, see `close`.
+fn owner_flow(owner: &[u8; 32]) -> Result<OwnerFlow, i8> {
+    let mut flow = OwnerFlow { present: false, spent: 0 };
     for (index, hash) in QueryIter::new(load_cell_lock_hash, Source::Input).enumerate() {
         if &hash == owner {
-            net += load_cell_capacity(index, Source::Input).map_err(sys)? as i128;
+            flow.present = true;
+            flow.spent += load_cell_capacity(index, Source::Input).map_err(sys)? as i128;
         }
     }
     for (index, hash) in QueryIter::new(load_cell_lock_hash, Source::Output).enumerate() {
         if &hash == owner {
-            net -= load_cell_capacity(index, Source::Output).map_err(sys)? as i128;
+            flow.spent -= load_cell_capacity(index, Source::Output).map_err(sys)? as i128;
         }
     }
-    Ok(net)
+    Ok(flow)
+}
+
+/// The owner pays for this transaction: owner actions and creation.
+fn owner_pays(owner: &[u8; 32]) -> Result<bool, i8> {
+    let flow = owner_flow(owner)?;
+    Ok(flow.present && flow.spent > 0)
+}
+
+/// Capacity of every farm of `owner` that this transaction closes: farm cells
+/// among the inputs whose type script is on no output. Counting them together
+/// keeps one refund from vouching for several closes.
+fn closing_deposits(me: &Script, owner: &[u8; 32]) -> Result<i128, i8> {
+    let mut total: i128 = 0;
+    for (index, ty) in QueryIter::new(load_cell_type, Source::Input).enumerate() {
+        let Some(ty) = ty else { continue };
+        if !same_code(me, &ty) || ty.args().raw_data().len() != TYPE_ARGS_LEN {
+            continue;
+        }
+        let data = load_cell_data(index, Source::Input).map_err(sys)?;
+        if data.len() < 33 || &data[1..33] != owner {
+            continue;
+        }
+        let hash = load_cell_type_hash(index, Source::Input).map_err(sys)?;
+        let stays = QueryIter::new(load_cell_type_hash, Source::Output).any(|other| other == hash);
+        if !stays {
+            total += load_cell_capacity(index, Source::Input).map_err(sys)? as i128;
+        }
+    }
+    Ok(total)
 }
 
 fn create(me: &Script) -> Result<(), i8> {
@@ -163,13 +207,13 @@ fn create(me: &Script) -> Result<(), i8> {
     // The owner must pay for their own farm. A gifted farm whose owner lock
     // never shows up could never be closed or spent — the capacity in it would
     // be stuck for ever.
-    if owner_net(&claimed.owner)? <= 0 {
+    if !owner_pays(&claimed.owner)? {
         return Err(E_NOT_OWNER);
     }
     Ok(())
 }
 
-fn close() -> Result<(), i8> {
+fn close(me: &Script) -> Result<(), i8> {
     let data = load_cell_data(0, Source::GroupInput).map_err(sys)?;
     let farm = Farm::decode(&data).map_err(|e| e as i8)?;
     // The other farms in the transaction replay this farm's action list, and
@@ -177,8 +221,17 @@ fn close() -> Result<(), i8> {
     if !load_actions(0, Source::GroupInput)?.is_empty() {
         return Err(E_CLOSE_WITH_ACTIONS);
     }
-    // Closing makes the owner richer: the deposit has to flow home.
-    if owner_net(&farm.owner)? >= 0 {
+    // The owner is behind this: one of their cells is spent. Without it a
+    // stranger could close anybody's farm by sending the owner a tip.
+    let flow = owner_flow(&farm.owner)?;
+    if !flow.present {
+        return Err(E_NOT_OWNER);
+    }
+    // And the deposit flows home, all of it but the fee. For a lock that wants
+    // a signature the owner input already says so; this is what keeps a lock
+    // that anybody may spend from handing the deposit to whoever asks.
+    let gained = -flow.spent;
+    if gained + CLOSE_FEE_ALLOWANCE < closing_deposits(me, &farm.owner)? {
         return Err(E_NOT_OWNER);
     }
     Ok(())
@@ -285,7 +338,7 @@ fn update(me: &Script, args: &[u8], unit: u32) -> Result<(), i8> {
     if cells[mine].actions.is_empty() && !outcome.needs_owner {
         return Err(E_NOTHING_HAPPENED);
     }
-    if outcome.needs_owner && owner_net(&outcome.farm.owner)? <= 0 {
+    if outcome.needs_owner && !owner_pays(&outcome.farm.owner)? {
         return Err(E_NOT_OWNER);
     }
 

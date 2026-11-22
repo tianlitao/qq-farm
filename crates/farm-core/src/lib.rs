@@ -550,17 +550,23 @@ fn roll_day(farm: &mut Farm, now: u32, unit: u32) {
 /// The visitor's half of a visitor action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Credit {
-    Help,
+    /// Cleared a problem nature planted: earns experience, capped daily.
+    Help { earned: bool },
     Mischief,
     Steal { crop: u8, amount: u8 },
 }
 
 fn apply_credit(farm: &mut Farm, credit: Credit) -> Result<()> {
     match credit {
-        Credit::Help => {
+        Credit::Help { earned } => {
             if farm.help_today < HELP_EXP_PER_DAY {
                 farm.help_today += 1;
-                farm.add_exp(EXP_HELP);
+                // Only nature's weeds pay experience: what a neighbour (or this
+                // very transaction) planted earns a helper nothing, or farms
+                // could mint experience from a weed round trip.
+                if earned {
+                    farm.add_exp(EXP_HELP);
+                }
             }
         }
         Credit::Mischief => {
@@ -796,8 +802,11 @@ fn run_actions(
                 let credit = match op {
                     OP_HELP => {
                         let kind = r.u8()?;
-                        clear_problem(farm.plot_mut(idx)?, kind, now, unit)?;
-                        Credit::Help
+                        // Experience only for nature's problems: what a
+                        // neighbour (or this very transaction) planted earns a
+                        // helper nothing.
+                        let natural = clear_problem(farm.plot_mut(idx)?, kind, now, unit)?;
+                        Credit::Help { earned: natural }
                     }
                     OP_MISCHIEF => {
                         let kind = r.u8()?;

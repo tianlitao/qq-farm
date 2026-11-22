@@ -1,18 +1,4 @@
 {
-  "devnet": {
-    "version": 2,
-    "validator": {
-      "txHash": "0x8a33f54a20d336dd87a52709b7d93bf625aa3789703076b3e2e93da409df5050",
-      "index": 0
-    },
-    "code": {
-      "txHash": "0x0531de4e96e2de63bc81101c9e46dc6508c4415640e1cd7d0880e46dfe771e96",
-      "index": 0
-    },
-    "codeHash": "0xd80c8921d405ec32160ba3d3c0db8a6c7d1060b836540b655a9e9bdfe55f6649",
-    "unit": 30,
-    "codeScriptHash": "0xe302f431740eb3b306571206dc3da768615f172ce7757a7d24473a3c1fd0809b"
-  },
   "testnet": {
     "version": 2,
     "validator": {
@@ -20,11 +6,25 @@
       "index": 0
     },
     "code": {
-      "txHash": "0x5c5c94acec18dd9c68daf2641b6573fb4db2bba9cec85ca22cb6de80093cdf18",
+      "txHash": "0x604a5bd71e6bb3ea89b28b1eef897c75f1d07cc509f52df3fe52c7e157c48cd6",
       "index": 0
     },
     "codeScriptHash": "0x0253fea2b3d45853c5381fb20ed7efffce8f79cfbb059e1ea3befddf299f775d",
-    "codeHash": "0xd80c8921d405ec32160ba3d3c0db8a6c7d1060b836540b655a9e9bdfe55f6649",
+    "codeHash": "0x45015bbb8c5157e5821c4afc938a5ad331284eec5e79e966fcd01c71ef6380e9",
     "unit": 3600
+  },
+  "devnet": {
+    "version": 2,
+    "validator": {
+      "txHash": "0xe5ab647d4f7f7852e404c8c50f23cfa2afdca6c11ba87e4a2e381b2864b60d60",
+      "index": 0
+    },
+    "code": {
+      "txHash": "0x031bdec190d97be638bcad1586b87213e4507158927a420ed5c06ae6cf463dad",
+      "index": 0
+    },
+    "codeScriptHash": "0x60a2616b11280b839537a6accd36c1fc09b5fe5959ee12becc3a56162200b3bd",
+    "codeHash": "0x45015bbb8c5157e5821c4afc938a5ad331284eec5e79e966fcd01c71ef6380e9",
+    "unit": 30
   }
 }

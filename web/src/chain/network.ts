@@ -65,6 +65,9 @@ export function createClient(network: NetworkId): ccc.Client {
       scripts: devnetScripts as unknown as Record<ccc.KnownScript, ccc.ScriptInfoLike>,
     });
   }
+  if (network === "mainnet") {
+    return new ccc.ClientPublicMainnet({ url: NETWORKS.mainnet.rpc, fallbacks: [] });
+  }
   return new ccc.ClientPublicTestnet({ url: NETWORKS.testnet.rpc, fallbacks: [] });
 }
 

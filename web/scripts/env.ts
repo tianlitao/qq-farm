@@ -22,6 +22,14 @@ export function readDeployments(): Partial<Record<NetworkId, Deployment>> {
   return JSON.parse(readFileSync(DEPLOYMENTS, "utf8"));
 }
 
+export function removeDeployment(network: NetworkId) {
+  const all = readDeployments();
+  delete all[network];
+  const text = `${JSON.stringify(all, null, 2)}\n`;
+  writeFileSync(DEPLOYMENTS, text);
+  writeFileSync(SERVED_DEPLOYMENTS, text);
+}
+
 export function writeDeployment(network: NetworkId, deployment: Deployment) {
   const all = readDeployments();
   all[network] = deployment;

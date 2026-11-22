@@ -12,6 +12,8 @@
     "upgrade:testnet": "tsx scripts/upgrade.ts --network testnet",
     "key:new": "tsx scripts/key.ts new",
     "key:info": "tsx scripts/key.ts",
+    "shutdown": "tsx scripts/shutdown.ts",
+    "shutdown:testnet": "tsx scripts/shutdown.ts --network testnet",
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name qq-farm --branch main",
     "bots": "tsx scripts/bots.ts",
     "e2e": "tsx scripts/e2e.ts"
