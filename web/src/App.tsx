@@ -15,7 +15,7 @@ import {
   TendIcon,
 } from "./art/icons";
 import { SceneBackdrop } from "./art/scene";
-import { t, useLang, cropName } from "./i18n";
+import { t, useLang, getLang, cropName } from "./i18n";
 import type { Move } from "./chain/farm";
 import { type Catalog, type FarmView, KIND_DRY, KIND_PEST, KIND_WEED, type PlotView } from "./chain/rules";
 import { type Game, useGame } from "./game";
@@ -904,7 +904,11 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
         <p>{t("rulesClose")}</p>
         <p>
           {t("rulesAudit")}{" "}
-          <a href="https://github.com/tianlitao/qq-farm/blob/main/AUDIT.md" target="_blank" rel="noreferrer">
+          <a
+            href={`https://github.com/tianlitao/qq-farm/blob/main/${getLang() === "en" ? "AUDIT.en.md" : "AUDIT.md"}`}
+            target="_blank"
+            rel="noreferrer"
+          >
             {t("rulesAuditLink")}
           </a>
         </p>

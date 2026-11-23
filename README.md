@@ -1,5 +1,7 @@
 # 垄上 · CKB 链上农场
 
+**中文** | [English](README.en.md)
+
 一个完全跑在 [Nervos CKB](https://www.nervos.org/) 上的种菜、偷菜游戏。开垦、播种、除草除虫浇水、收获、卖菜、扩地、养狗，以及去邻居地里摘菜、帮忙、放草放虫，全部由一份链上合约验算。没有服务器；存档和判定都在链上，当前规则下谁也不能单方面动你的农场。合约**可以由部署者公开升级**（见下文"升级与信任模型"）：升级换的是规则代码，type id 不变、每一次升级链上可查；但升级权是真实的权力，玩之前请读那一节。
 
 **已审计（四份模型审计汇总）**：统一基线见 [AUDIT.md](AUDIT.md)，原始报告包括 [AUDIT-gemini-4-neon.md](AUDIT-gemini-4-neon.md)（Gemini 4 Neon，2026-11-23 最新）、[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮）、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2）与 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)（glm-5.3-flash）。方法涵盖源码逐行审查 + 真实 CKB-VM 攻击探针 + 本地链/测试网实链验证；**69 个测试**在当前二进制上全部通过。审计发现的高危漏洞（小费关闭他人农场）及全部三项中危问题（历史区块头按天步进重置计数、同笔放草拔草零状态变化活性 DoS、`shutdown.ts` 跨 `unit` 漏检）**均已修复并上线**；ACP / OmniLock-ACP 强关风险（GN-01）已在官方前端禁止开垦缓解。已部署至 **CKB 主网**（`https://ckb-farm.pages.dev`）与 **CKB 测试网**（`https://ckb-farm-testnet.pages.dev`）；这些是模型审计，不等同第三方审计公司。
