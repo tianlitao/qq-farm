@@ -199,7 +199,7 @@ npm run build && npm run deploy:pages   # 前端记录更新后重新发布网�
 
 已验证的：
 
-- 65 个 Rust 测试全部通过，全部跑在真实的 CKB-VM 里：规则 9、农场合约 20、升级路径 5、四轮审计探针 32。
+- 66 个 Rust 测试全部通过，全部跑在真实的 CKB-VM 里：规则 9、农场合约 20、升级路径 5、四轮审计探针 32。
 - 构建可复现（本机）：`rust-toolchain.toml` 锁定 rustc 1.98.1，重编译出的 `build/farm`、`build/type-id` 和前端 WASM 与提交的逐字节一致。别的机器上尚未验证。
 - 可升级部署在本地链上完整验证过（独立复跑）：改 `INIT_GOLD` 500→600、`npm run upgrade` 原地升级、新农场拿到 600 金币、**升级前创建的老农场在新二进制下继续买种播种**、再升级回 500 后新农场恢复 500、老农场关闭收回 CKB；全程 code script hash 不变。
 - 测试网 v2 部署核对过：代码 cell 与校验器均存活，链上数据哈希、type script 哈希与 `deployments.json` 记录逐项一致；v2 世界里有真实玩家农场在正常游玩。
