@@ -50,7 +50,7 @@
 
 ### 工作区状态警示（如实记录）
 
-本轮审计期间工作区再次被并行会话修改：`web/src/game.ts` 在 14:47 被改坏（删除了 `mineOut`/`visitedOut` 两个 ref 的定义但保留了引用），`tsc --noEmit` 报 8 个 TS2304/TS2552 错误。**前端当前构建是坏的**，与合约无关，但提交前必须修复。另有多份审计报告文件（AUDIT.md / AUDIT-qwen4-max.md / AUDIT-fable-5.2.md / AUDIT-gemini-4-neon.md / AUDIT-glm-5.3-flash.md）在并行增删，README 的链接指向需与最终文件名核对。
+本轮审计期间工作区再次被并行会话修改：`web/src/game.ts` 在 14:47 一度被改坏（删除了 `mineOut`/`visitedOut` 两个 ref 的定义但保留了引用），`tsc --noEmit` 报 8 个 TS2304/TS2552 错误；14:52 并行会话已自行修复，本轮结束时 `tsc` 与 `vite build` 均通过。另有多份审计报告文件（AUDIT.md / AUDIT-qwen4-max.md / AUDIT-fable-5.2.md / AUDIT-gemini-4-neon.md / AUDIT-glm-5.3-flash.md）在并行增删，README 的链接指向需与最终文件名核对。
 
 ---
 
