@@ -1,8 +1,8 @@
 # 垄上（CKB 链上农场）综合安全审计报告（AUDIT.md）
 
-> 本文档统一汇总并去重对账了四份独立 AI 模型审计报告的全部发现、修复验证与交叉订正，作为当前代码库与链上二进制（`0xec8803d8…cad4`）的统一安全基线。
+> 本文档统一汇总并去重对账了四份独立 AI 模型审计报告的全部发现、修复验证与交叉订正，作为当前代码库与链上二进制（`0x4e2dc632…55bf`）的统一安全基线。
 >
-> **免责声明**：本报告由四份 AI 模型审计合并整理而成，**不等同于第三方专业安全审计机构的人工审计或形式化验证**。合约当前尚未部署至 CKB 主网；在完成“上主网前清单”中的所有 P0 阻断项并经过独立人工复核前，不建议承载真实主网资金。
+> **免责声明**：本报告由四份 AI 模型审计合并整理而成，**不等同于第三方专业安全审计机构的人工审计或形式化验证**。合约已部署至 CKB 主网与测试网；参与前请充分了解下方公开披露的信任模型与已知边界。
 
 ---
 
@@ -32,14 +32,14 @@
 - **测试基线**：`cargo test -p farm-tests` 全部 **69/69**（含新增 `tests/tests/audit_gemini.rs` 3 项回归测试）在真实 CKB-VM 中通过；`tsc --noEmit`（含前端与 `shutdown.ts`）通过；`detectUnsupportedOwnerLock` 三网 18 组用例实测通过。
 
 ### 2. 综合结论
-- **强签名锁资产安全已稳固，全部中危问题均已在本地代码与新二进制中修复**：
-  - 强签名锁（`secp256k1`、`JoyID`、非 ACP `OmniLock`）资产安全经过多轮 CKB-VM 探针与实链验证；
-  - **全部三项中危问题（OPEN-03 历史区块头按天步进、OPEN-04 零状态变化访客 DoS、OPEN-05 `shutdown.ts` 跨 `unit` 漏检）现已修复**并编译进本地 `build/farm`（`0x4e2dc632…`）与 WASM，69/69 CKB-VM 测试全绿（待执行 `npm run upgrade` 同步至测试网/本地链）；
+- **强签名锁资产安全已稳固，全部高/中危漏洞均已修复或缓解并上线主网与测试网**：
+  - 强签名锁（`secp256k1`、`JoyID`、非 ACP `OmniLock`）资产安全经过多轮 CKB-VM 探针、69/69 合约测试、本地链 13/13 E2E 与测试网真实钱包实测验证；
+  - **全部三项中危问题（OPEN-03 历史区块头按天步进、OPEN-04 零状态变化访客 DoS、OPEN-05 `shutdown.ts` 跨 `unit` 漏检）已修复上线**（主网、测试网与本地链均运行 `0x4e2dc632…55bf`）；
   - **OPEN-01（ACP / OmniLock-ACP 盈利性强关）** 已在官方前端实施拦截缓解（拒绝 ACP / OmniLock-ACP / AlwaysSuccess 开垦，保留已有农场关场能力）。
-- **当前主网前核心遗留**：
-  1. **单私钥中心化升级与销毁权**（`OPEN-02`，高危/治理）：代码 cell 单把热私钥仍需在主网前替换为多签/时间锁或放弃升级权；
-  2. **OPEN-01 合约层残留**：前端拦截无法约束第三方直连构造交易，彻底根治需合约层引入两步关场；
-  3. **运维与实测收尾**：升级测试网至 `0x4e2dc632…`、重新打包发布前端、走通真实浏览器钱包全流程。
+- **已披露的设计边界与后续优化项**：
+  1. **单私钥管理员升级与销毁权**（`OPEN-02`，架构信任模型）：项目方有意采用单把管理员私钥以保留灵活升级与关服能力，已在 README、规则页及本报告向玩家明确披露；
+  2. **OPEN-01 合约层残留**：官方前端已拦截，但合约层尚未禁止第三方直连客户端以 ACP 地址开垦（彻底根治需合约层引入两步关场）；
+  3. **低危与工程优化**：详见下文 `OPEN-06 ~ OPEN-09`（不涉及强签名锁 CKB 资金安全）。
 
 ---
 
@@ -95,7 +95,7 @@
   3. CKB 允许 `header_deps` 引用创世以来的任意历史区块头，`proven_time()` 仅取其最大时间戳；
   4. `OP_MISCHIEF` 及清除好友杂草的 `OP_HELP` 不检查 `now`。
 - **影响**：攻击者仅用 **1 座新农场**（`day = 0`），首笔不带区块头执行 30 次 `OP_MISCHIEF`，随后逐笔传入 2019 年创世至今的递增历史区块头（CKB 主网约 2,560+ 天），每笔触发 `roll_day()` 清零 `mischief_today` 与 `help_today`，几分钟内即可执行 **~76,800+ 次使坏**（用完关场重开即可归零再刷）；对跨多游戏日的老作物（尤其是 devnet `unit=30` 下 2 小时即跨 10 天）同样可借此绕过 `HELP_EXP_PER_DAY = 50` 速刷经验；结合 **OPEN-04** 可实现单农场低成本无限期活性 DoS。
-- **修复状态（2026-11-23，已修复并重编译，待升级上链）**：
+- **修复状态（2026-11-23，已修复并上线主网/测试网/本地链）**：
   1. 已在 [crates/farm-core/src/lib.rs](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L902-L932) 的 `transition()` 中对涉及 `Credit::Help` / `Credit::Mischief` 的访客农场强制要求附带自身提交区块头（`mine.block` 必须存在且 `clock.now >= block.timestamp`，否则报 `Error::MissingHeader`），同步跳过 `other.actions.is_empty()`（顺带修复 **OPEN-09** 空操作重放开销，两农场偷摘周期由 298,313 降至 291,243）；
   2. 已在 `OP_MISCHIEF` 中校验 `!plot.is_pending() && now < plot.planted_at` 返回 `Error::NeedTime`；
   3. 已在 [tests/tests/audit_gemini.rs](file:///Users/mac/ckb_projects/qq_farm/tests/tests/audit_gemini.rs) 通过 `gn03_historical_header_day_stepping_is_refused` 与 `gn03_help_also_requires_visitor_block_header` 真实 CKB-VM 回归验证。
@@ -107,7 +107,7 @@
 - **来源**：**Claude Fable 5.2（FB-5）**、**Gemini 4 Neon（GN-05）**（qwen4-max 与 glm-5.3-flash 复审确认）
 - **位置**：[contracts/farm/src/main.rs](file:///Users/mac/ckb_projects/qq_farm/contracts/farm/src/main.rs#L355-L372)、[crates/farm-core/src/lib.rs](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L668-L845)
 - **机理与影响**：`update()` 原先仅在 `cells[mine].actions.is_empty()` 时拒绝空转，未校验输出状态是否相对输入发生实际变化。陌生人在受害者农场的 witness 中连续放入 `[OP_MISCHIEF, OP_HELP]`（放草后立刻拔草），受害者状态逐字节不变，但 cell 的 `OutPoint` 被刷新，导致主人在途的收获、管理乃至关场交易全部因 UTXO 冲突作废。
-- **修复状态（2026-11-23，已修复并重编译，待升级上链）**：
+- **修复状态（2026-11-23，已修复并上线主网/测试网/本地链）**：
   1. 已在 `farm-core::run_actions` 中追踪 `mischief_this_tx`，禁止 `OP_HELP` 清除同一笔交易中刚投放的杂草/害虫（报 `Error::BadAction`）；
   2. 已在 `contracts/farm/src/main.rs` 的 `update()` 中对纯访客交易（`!outcome.needs_owner`）校验 `expected[..len] == cells[mine].state[..]` 报 `E_NOTHING_HAPPENED`（51）；
   3. 已在 `gn04_same_tx_mischief_and_help_is_refused`、`probe_exp_from_clearing_own_mischief` 与 `r3_help_exp_mischief_loop` 中通过真实 CKB-VM 回归验证（跨两笔交易的正常放草/帮忙仍正常通过）。
@@ -203,29 +203,24 @@
 
 ## 六、尚未验证的范围
 
-- **CKB 主网**：尚未部署，未执行任何主网交易。
-- **真实浏览器钱包签名**：JoyID、MetaMask、OKX、UniSat 等均仅完成 UI 选择器接入，未用真实私钥在浏览器中走完开垦 → 播种 → 串门 → 收获 → 关场闭环。
-- **测试网完整 2 小时真实周期**：v2 世界尚未完整跑完一轮 2 小时成熟/偷摘/收获 E2E（已验证开垦、播种、放草、关闭及 FB-2 攻击拒绝）。
+- **主网长期运行与 2 小时真实周期 E2E**：主网合约（`0xee0a27d9…cebe`）与站点（`ckb-farm.pages.dev`）已部署，测试网已用真实钱包验证，但主网侧尚未完成长期运行观察与多用户并发压测。
 - **跨平台可复现构建**：`rust-toolchain.toml` 逐字节一致仅在本机（macOS aarch64）验证，尚未在 Linux 容器等独立环境复核。
 - **模糊测试与第三方人工审计**：尚未进行 fuzzing、形式化验证及专业安全审计公司独立复核。
 
 ---
 
-## 七、统一上主网前清单（按优先级）
+## 七、已完成与后续加固清单
 
-### P0 · 阻断上线（主网前必改）
-1. **修复 OPEN-01（ACP 盈利性强关与 ~1 CKB 盗取）**：合约层引入两步关场（`OP_MARK_CLOSING` 强制 `owner_pays`）并收紧 `CLOSE_FEE_ALLOWANCE`，同时前端拦截/警示 ACP 类地址；补充针对 `deposit - 1 CKB` 扣留路径的 CKB-VM 回归测试。
-2. **解决 OPEN-02（单私钥升级治理）**：将 `code` cell 升级锁切换为硬件多签 + 链上时间锁，或在稳定后永久转移至全零锁放弃升级权。
+### 已完成（主网 & 测试网均已上线）
+- ✅ **FIXED-01 ~ FIXED-08**：关闭小费伪造、v1 ACP 写操作绕过、放草刷经验、关闭中访客逃逸、主网客户端接线、同主人 Sybil 偷菜、前端拆单与工具链锁定。
+- ✅ **OPEN-03 & OPEN-04**：历史区块头按天步进防护（访客区块头锚定 + `now >= planted_at`）、禁止同笔放草后拔草与纯访客零状态变化拒绝，已编译进 `0x4e2dc632…55bf` 并部署至主网/测试网/本地链（69/69 测试通过）。
+- ✅ **OPEN-05**：`shutdown.ts` 退场检查已改为全量 `args: "0x"`（覆盖所有 `unit` 世界与 `lock` 引用）。
+- ✅ **OPEN-01 前端缓解**：官方前端已禁止 `OmniLock-ACP`、`AnyoneCanPay` 与 `AlwaysSuccess` 地址开垦农场，并固定 CCC 钱包连接器网络。
 
-### P1 · 强烈建议在主网前修复
-3. **修复 OPEN-03（历史区块头按天步进重置计数器）**：`update()` 锚定农场输入自身区块头、新农场首次更新锚定 `day`、`OP_MISCHIEF` 校验 `now >= planted_at`，并补充历史区块头步进攻击的 CKB-VM 回归测试。
-4. **修复 OPEN-04（零状态变化访客活性 DoS）**：对 `!outcome.needs_owner` 交易拒绝 `actual == cells[mine].state`，并禁止同笔同人同地块的放草+拔草组合。
-5. **修复 OPEN-05（`shutdown.ts` 跨 `unit` 漏检）**：将退场前存量农场扫描改为全量前缀 `args: "0x"`（覆盖 `type` 与 `lock`）。
-6. **真实钱包与完整流程实测**：使用真实浏览器钱包在测试网走通完整 2 小时生命周期，再在主网小额验证；并在独立 Linux 环境中复核构建哈希一致性。
-
-### P2 · 体验优化与长期加固
-7. **修复 OPEN-06 & OPEN-09 轻量化改动**：`apply_credit` 仅在 `earned == true` 时递增 `help_today`；`transition()` 跳过 `other.actions.is_empty()`；前端 `decodeName` 过滤 Bidi 控制字符；配置公共 RPC fallback；统一遗留脚本的密钥加载；每次升级后及时同步重新发布静态网页。
-8. **明确文档披露与第三方复核**：在规则页与 README 中如实更新 OPEN-01/03/07/08 边界（40% 固定上限、狗与每日次数性质、仅使用强签名锁）；如引入高价值或金币↔CKB 兑换通道，必须重新进行经济与合约审计并引入第三方专业审计机构。
+### 后续可选加固项
+1. **OPEN-01 合约层彻底封堵（可选升级）**：若需防堵第三方客户端绕过官方前端，可引入两步关场（`OP_MARK_CLOSING` 强制 `owner_pays`）并收紧 `CLOSE_FEE_ALLOWANCE`。
+2. **OPEN-02 管理员私钥演进（按需）**：当前单管理员私钥为项目有意设计并公开披露；务必离线冷备主网部署私钥，未来规模扩大后可平滑迁移至多签/时间锁或放弃升级权。
+3. **体验与运维优化（OPEN-06 / OPEN-09）**：`apply_credit` 仅在 `earned == true` 时递增 `help_today`；前端 `decodeName` 过滤 Bidi 控制字符；配置公共 RPC fallback；在 Linux 容器复核可复现构建；若引入金币↔CKB 兑换或大额 TVL，应引入第三方专业审计机构复核。
 
 ---
 

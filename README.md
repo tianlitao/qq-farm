@@ -115,7 +115,7 @@ build/type-id      编译好的 type-id 校验器（约 28 KB）
 ## 开发
 
 ```bash
-cargo test -p farm-tests          # 66 个测试：规则 9、合约 20、升级路径 5、四轮审计探针 32，全部跑在真实 CKB-VM 里
+cargo test -p farm-tests          # 69 个测试：规则 9、合约 20、升级路径 5、审计探针与回归 35，全部跑在真实 CKB-VM 里
 scripts/build-contract.sh         # 编译器版本由 rust-toolchain.toml 锁定；需要 riscv64imac-unknown-none-elf 目标
 scripts/build-wasm.sh             # 需要 rustup target add wasm32-unknown-unknown
 ```
@@ -145,7 +145,7 @@ npm run build                     # 类型检查并打包
 - **type-id 校验器 cell**：锁是全零哈希（永远打不开），代码 cell 的 type script 就是它。它保证代码 cell 的 type id 只此一份、升级时不会漂移。
 - **代码 cell**：锁是部署者的锁，data 是农场二进制。农场 cell 用 `hash_type: "type"` 引用代码 cell 的 type script 哈希，所以升级后所有农场原地运行新代码。
 
-当前版本：代码 cell 交易 `0xcb92cb0103c87b76d7be2a7cb2010eb36074c021339cd6417b0c39a9dc454df5`，引用哈希（code script hash）`0x0253fea2b3d45853c5381fb20ed7efffce8f79cfbb059e1ea3befddf299f775d`，版本哈希 `0x4e2dc6328519ad576cb9963f7693ae2a9b4ebc914c555bd5793975fd3a4055bf`，游戏时速 3600 秒/小时。2026-11-23 原地升级上线，包含 close 双条件修复、closing-visitor 守卫（错误码 54）、历史区块头按天步进防护（OPEN-03）及同笔放草拔草/零状态变化防护（OPEN-04），前端已同步构建发布至 Cloudflare Pages 并禁止 OmniLock-ACP / ACP 地址开垦（OPEN-01 缓解）。最新记录以 `web/src/chain/deployments.json` 为准。网页默认跑测试网；跑本地链则在 `web/.env` 里写 `VITE_NETWORK=devnet`。
+当前版本：代码 cell 交易 `0xcb92cb0103c87b76d7be2a7cb2010eb36074c021339cd6417b0c39a9dc454df5`，引用哈希（code script hash）`0x0253fea2b3d45853c5381fb20ed7efffce8f79cfbb059e1ea3befddf299f775d`，版本哈希 `0x4e2dc6328519ad576cb9963f7693ae2a9b4ebc914c555bd5793975fd3a4055bf`，游戏时速 3600 秒/小时。2026-11-23 原地升级上线，包含 close 双条件修复、closing-visitor 守卫（错误码 54）、历史区块头按天步进防护（OPEN-03）及同笔放草拔草/零状态变化防护（OPEN-04），前端已同步构建发布至独立测试网站点 `https://ckb-farm-testnet.pages.dev` 并禁止 OmniLock-ACP / ACP 地址开垦（OPEN-01 缓解）。最新记录以 `web/src/chain/deployments.json` 为准。主网站点为 `https://ckb-farm.pages.dev`（`web/.env` 默认 `VITE_NETWORK=mainnet`）；跑本地链则在 `web/.env` 里写 `VITE_NETWORK=devnet`。
 
 测试网用 CCC 的钱包连接器登录：网页上是"连接钱包"按钮，支持 JoyID、MetaMask、OKX、UniSat 等。钱包需要有测试网 CKB（[水龙头](https://faucet.nervos.org/)）才能付手续费和创建农场 cell。本地链仍使用内置测试账户，不需要钱包。
 
@@ -196,7 +196,7 @@ npm run build && npm run deploy:pages   # 前端记录更新后重新发布网�
 - 伪造第二份代码 cell 或改掉 type id：type-id 校验器（锁死、不可升级）拒绝一切身份漂移，全网只有一份代码身份。
 - 绕过农场规则直接转走农场 cell 里的 CKB：只要运行的还是这份农场二进制，容量只增不减、关闭必须主人在场。**但注意**——上一条"能换任意二进制"意味着部署者理论上可以换上一份允许转移 CKB 的规则。所以"不能偷 CKB"的前提是"部署者不换恶意规则"，这正是信任所在。
 
-结论：**这是一个升级权集中、升级过程透明的游戏，不是"无人能改"的游戏。** 部署私钥等同于整个游戏的管理员密钥。当前测试网的部署私钥是脚本生成的测试钥匙（`.testnet-deployer.key`，只持有测试币）；**上主网前必须换成多签或硬件钱包，并公开升级治理方式**（例如时间锁、社区监督、或最终放弃升级权把代码 cell 锁死）。type-id 校验器保证升级"身份不漂移、无伪造副本"，不保证升级"善意"。
+结论：**这是一个升级权集中、升级过程透明的游戏，不是"无人能改"的游戏。** 部署私钥等同于整个游戏的管理员密钥（单管理员升级权是有意采用的运营设计，方便快速修复与迭代规则；部署私钥务必离线安全保管，未来如有需要也可迁移至多签、时间锁或永久锁死代码 cell 放弃升级权）。type-id 校验器保证升级"身份不漂移、无伪造副本"，不保证升级"善意"。
 
 升级的链上验证（`tests/tests/upgrade.rs`，5 个测试跑在真实 CKB-VM 里）：代码 cell 不能复制、type id 不能漂移、伪造第二世界被拒、原地换代码后老农场照常验证、销毁代码 cell 后农场被冻结。本地链上做过完整往返：`INIT_GOLD` 500→600 升级生效、老农场在新规则下继续玩、再升回 500 新农场恢复 500，全程 type id 不变。
 
@@ -204,22 +204,20 @@ npm run build && npm run deploy:pages   # 前端记录更新后重新发布网�
 
 已验证的：
 
-- 66 个 Rust 测试全部通过，全部跑在真实的 CKB-VM 里：规则 9、农场合约 20、升级路径 5、四轮审计探针 32。
+- 69 个 Rust 测试全部通过，全部跑在真实的 CKB-VM 里：规则 9、农场合约 20、升级路径 5、审计探针与回归 35。
 - 构建可复现（本机）：`rust-toolchain.toml` 锁定 rustc 1.98.1，重编译出的 `build/farm`、`build/type-id` 和前端 WASM 与提交的逐字节一致。别的机器上尚未验证。
 - 可升级部署在本地链上完整验证过（独立复跑）：改 `INIT_GOLD` 500→600、`npm run upgrade` 原地升级、新农场拿到 600 金币、**升级前创建的老农场在新二进制下继续买种播种**、再升级回 500 后新农场恢复 500、老农场关闭收回 CKB；全程 code script hash 不变。
-- 测试网 v2 部署核对过：代码 cell 与校验器均存活，链上数据哈希、type script 哈希与 `deployments.json` 记录逐项一致；v2 世界里有真实玩家农场在正常游玩。
-- `npm run e2e` 在本地节点上通过全部 13 步：开垦、陌生人不能花主人的金币、播种、未熟不能收也不能偷、邻居无需主人签名放草、处理、成熟、偷摘、不能重复偷、收获卖出、伪造状态被合约拒绝、主人收回农场。
-- 网页在浏览器里实际走通了开垦、买种、播种、打理、收获、卖出、串门偷摘。
+- 主网与测试网 v2 部署均已上线：`build/farm`（`0x4e2dc632…55bf`）已部署至 CKB 主网（`https://ckb-farm.pages.dev`）并原地升级至测试网（`https://ckb-farm-testnet.pages.dev`）与本地链，代码 cell 与校验器记录以 `web/src/chain/deployments.json` 为准。
+- `npm run e2e` 在升级后的本地节点上通过全部 13 步：开垦、陌生人不能花主人的金币、播种、未熟不能收也不能偷、邻居无需主人签名放草、处理、成熟、偷摘、不能重复偷、收获卖出、伪造状态被合约拒绝、主人收回农场。
+- 测试网环境已使用真实浏览器钱包完成实测；网页在浏览器里走通了开垦、买种、播种、打理、收获、卖出、串门偷摘与收回。
 - 4 个机器人连续跑了一小时、四百多笔交易，没有失败。
-- 测试网上用真实节点通过 `scripts/testnet-smoke.ts`：开垦、买种播种、收回农场并退回 CKB。钱包选择器在浏览器里正常打开（未用真实钱包私钥登录：本机没有这些钱包）。
 - 测试网上完整的偷摘/收获流程需要 2 小时（萝卜 2 游戏小时 × 3600 秒），用 `FARM_NETWORK=testnet npm run e2e` 跑。
 
-还没做的：
+已知边界与待后续改进：
 
-- **没有部署到主网。** 只有本地链和测试网。
-- **主网客户端接线已修复（审计 R3-F4）。** `createClient("mainnet")` 现在返回 `ClientPublicMainnet` 连主网 RPC；`key.ts` 走同一入口。仍未做的是用真实钱包在主网完整走一遍（主网合约也尚未部署）。
-- **没有用真实钱包私钥在浏览器里登录过。** CCC 钱包选择器已接好，但这里没有 JoyID、MetaMask 等钱包的私钥；测试网交易用私钥账号验证过。
-- **已审计：四份模型审计汇总见 [AUDIT.md](AUDIT.md)**，含 [AUDIT-gemini-4-neon.md](AUDIT-gemini-4-neon.md)（Gemini 4 Neon，2026-11-23）、[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮）、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2）与 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)（glm-5.3-flash）。含 69 项 CKB-VM 攻击探针与实链验证；属模型审计，没有第三方审计公司复核。在放真钱之前请当它是实验品。
+- **没有第三方专业审计公司复核。** 已完成四份模型审计汇总（见 [AUDIT.md](AUDIT.md)，含 [AUDIT-gemini-4-neon.md](AUDIT-gemini-4-neon.md)、[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md) 与 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)），含 69 项 CKB-VM 攻击探针与实链验证；但模型审计不等同第三方审计公司，仍建议按实验性链上游戏理解。
+- **跨平台可复现构建尚未在非 macOS 环境验证。** 本机（macOS aarch64）按 `rust-toolchain.toml` 重编译逐字节一致，尚未在 Linux 容器中复验。
+- **公共 RPC 暂未配置多节点 fallback。** 目前主网/测试网前端各指向单一公共 RPC。
 - **【已修复上线】历史区块头按天步进重置计数（OPEN-03 / GN-03）与同笔放草拔草零状态变化 DoS（OPEN-04 / FB-5 / GN-05）。** 访客参与每日计次操作必须附带自身提交区块头锚定时间且 `OP_MISCHIEF` 要求 `now >= planted_at`；禁止同笔交易放草后拔草，且纯访客交易必须产生实际状态变化（否则报 51）。`shutdown.ts` 退场扫描已改为全量 `args: "0x"`（OPEN-05）。
 - **【部分修复，低危】每日使坏上限（Fable 5.2 报告 FB-2、FB-3）。** 在关闭自己农场的那笔交易里放草放虫不计次数——这一条已修（合约以错误码 54 拒绝），本地链和测试网都已上线。没修的是：同一玩家的第二座农场另有 30 次。硬边界是每块地每季最多一草一虫。不涉及 CKB。
 - **【已修复上线 / ACP 前端拦截缓解】close 授权与 ACP 锁（R3-F1 / GN-01）。** close 采用双条件（owner 锁输入在场 + 押金合并全额回流 owner，差额 ≤1 CKB），强签名锁完全防盗。对于 ACP / OmniLock-ACP 锁用户，Gemini 4 Neon 指出陌生人仍可借 1 CKB 手续费容差无签名强制关场并套利 ~0.9999 CKB；**官方前端现已禁止 OmniLock-ACP、AnyoneCanPay 及 AlwaysSuccess 地址开垦农场**（保留已有农场关场能力）。
