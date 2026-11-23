@@ -1,5 +1,7 @@
 # 审计报告 · Claude Fable 5.2
 
+**中文** | [English](AUDIT-fable-5.2.en.md)
+
 - **审计方**：Claude Fable 5.2（Anthropic 的 AI 模型，在 Claude Code 会话内执行；**不是**第三方人工审计公司）
 - **日期**：2026-11-21 至 2026-11-23（本文件为 11-23 复审后的完整版）
 - **对象**：`qq-farm`（垄上 · CKB 链上农场）

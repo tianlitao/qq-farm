@@ -1,5 +1,7 @@
 # 审计报告 · glm-5.3-flash
 
+**中文** | [English](AUDIT-glm-5.3-flash.en.md)
+
 - **审计方**：glm-5.3-flash（ZCode 会话内执行，AI 模型审计，非第三方人工审计公司）
 - **日期**：2026-11-21
 - **对象**：`qq-farm` 链上合约与部署结构
