@@ -390,11 +390,7 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
           </span>
           <span className="brand-text">
             <span className="brand-name">{t("brand")}</span>
-            <span className="brand-sub">
-              {t("brandSub", {
-                network: t(game.network.id === "devnet" ? "netDevnet" : game.network.id === "testnet" ? "netTestnet" : "netMainnet"),
-              })}
-            </span>
+            <span className="brand-sub">{t("brandSub")}</span>
           </span>
         </div>
         {farm && (
