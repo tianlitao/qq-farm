@@ -5,7 +5,7 @@ import { ccc } from "@ckb-ccc/ccc";
 import { useCcc } from "@ckb-ccc/connector-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "./i18n";
-import { ChainError, type Clock, type FarmCell, FarmChain, type Move } from "./chain/farm";
+import { ChainError, type Clock, type FarmCell, FarmChain, type Move, type UnsupportedOwnerLock } from "./chain/farm";
 import { DEVNET_ACCOUNTS, NETWORKS, type Deployment, type NetworkId, createClient, deploymentOf } from "./chain/network";
 import { type Catalog, type FarmView, loadRules, view } from "./chain/rules";
 import wasmUrl from "./chain/farm_wasm.wasm?url";
@@ -54,6 +54,7 @@ export function useGame() {
   const [clockAt, setClockAt] = useState(0);
   const [owner, setOwner] = useState<string>();
   const [address, setAddress] = useState<string>();
+  const [unsupportedLock, setUnsupportedLock] = useState<UnsupportedOwnerLock>();
   const [balance, setBalance] = useState<bigint>();
   const [visiting, setVisiting] = useState<string>();
   const [basket, setBasket] = useState<Move[]>([]);
@@ -236,15 +237,18 @@ export function useGame() {
     setOwner(undefined);
     setLoaded(false);
     setAddress(undefined);
+    setUnsupportedLock(undefined);
     setBalance(undefined);
     setBasket([]);
     setVisiting(undefined);
     localStorage.setItem(ACCOUNT_KEY, String(accountIndex));
     (async () => {
       const obj = await signer.getRecommendedAddressObj();
+      const badLock = await chain.unsupportedOwnerLock(obj.script);
       if (cancelled) return;
       setOwner(obj.script.hash().slice(2));
       setAddress(obj.toString());
+      setUnsupportedLock(badLock);
     })();
     return () => {
       cancelled = true;
@@ -377,6 +381,10 @@ export function useGame() {
   const create = useCallback(
     async (name: string) => {
       if (!chain || !signer || busy) return;
+      if (unsupportedLock) {
+        toast("bad", t(unsupportedLock === "omnilock-acp" ? "unsupportedOmnilockAcp" : "unsupportedAcpLock"));
+        return;
+      }
       setBusy("正在开垦农场…");
       try {
         const { farm } = await chain.createFarm(signer, name);
@@ -391,7 +399,7 @@ export function useGame() {
         await refreshCheap().catch(() => {});
       }
     },
-    [chain, signer, busy, toast, refreshCheap, owner],
+    [chain, signer, busy, unsupportedLock, toast, refreshCheap, owner],
   );
 
   const close = useCallback(async () => {
@@ -422,6 +430,7 @@ export function useGame() {
     accountIndex,
     setAccountIndex,
     address,
+    unsupportedLock,
     balance,
     farms,
     loaded,

@@ -41,24 +41,25 @@ if (!validatorSpendable) {
   console.log("recovering the code cell only.");
 }
 
-// No farm may be left behind: burning the code cell freezes any open farm's
-// deposit for ever.
-const argsHex = ccc.hexFrom(ccc.numLeToBytes(deployment.unit, 4));
-const remaining: string[] = [];
-for await (const cell of client.findCellsOnChain(
-  {
-    script: { codeHash: deployment.codeScriptHash, hashType: "type", args: argsHex },
-    scriptType: "type",
-    scriptSearchMode: "prefix",
-    withData: false,
-  },
-  "asc",
-  100,
-)) {
-  remaining.push(cell.outPoint.txHash);
+// No farm (or cell locked by this script) may be left behind across ANY `unit`
+// world: burning the code cell freezes any open farm's deposit for ever.
+const remaining = new Set<string>();
+for (const scriptType of ["type", "lock"] as const) {
+  for await (const cell of client.findCellsOnChain(
+    {
+      script: { codeHash: deployment.codeScriptHash, hashType: "type", args: "0x" },
+      scriptType,
+      scriptSearchMode: "prefix",
+      withData: false,
+    },
+    "asc",
+    100,
+  )) {
+    remaining.add(`${cell.outPoint.txHash}:${Number(cell.outPoint.index)}`);
+  }
 }
-if (remaining.length > 0 && !process.argv.includes("--force")) {
-  console.error(`${remaining.length} farm cell(s) still live on ${network}:`);
+if (remaining.size > 0 && !process.argv.includes("--force")) {
+  console.error(`${remaining.size} live cell(s) still depend on code script ${deployment.codeScriptHash} on ${network}:`);
   remaining.forEach((h) => console.error(`  ${h}`));
   console.error(`their owners must close them first (or pass --force to strand their deposits).`);
   process.exit(1);

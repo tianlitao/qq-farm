@@ -2,7 +2,7 @@
 
 一个完全跑在 [Nervos CKB](https://www.nervos.org/) 上的种菜、偷菜游戏。开垦、播种、除草除虫浇水、收获、卖菜、扩地、养狗，以及去邻居地里摘菜、帮忙、放草放虫，全部由一份链上合约验算。没有服务器；存档和判定都在链上，当前规则下谁也不能单方面动你的农场。合约**可以由部署者公开升级**（见下文"升级与信任模型"）：升级换的是规则代码，type id 不变、每一次升级链上可查；但升级权是真实的权力，玩之前请读那一节。
 
-**已审计（多份模型审计）**：[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮，2026-11-23 最新）、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2，2026-11-23）、[AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)（glm-5.3-flash）。方法都是源码逐行审查 + 真实 CKB-VM 攻击探针 + 本地链/测试网实链验证；66 个测试在当前二进制上全部通过。审计发现的高危漏洞（任何人可用一笔"小费"关闭别人的农场）**已修复并在本地链和测试网上线**，第四轮在当前链上二进制上复验全部攻击转为拒绝。复审中发现的低危问题（关闭中的农场能绕过每日使坏上限）**也已修复并上线**。还开着的问题：部署钥匙是单把热钥匙、使坏上限按农场计而不是按玩家计（低危，第四轮实证）、陌生人可以反复碰你的农场 cell 让你的交易作废。**没有部署到主网**；这些是模型审计，不等同第三方审计公司。
+**已审计（四份模型审计汇总）**：统一基线见 [AUDIT.md](AUDIT.md)，原始报告包括 [AUDIT-gemini-4-neon.md](AUDIT-gemini-4-neon.md)（Gemini 4 Neon，2026-11-23 最新）、[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮）、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2）与 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)（glm-5.3-flash）。方法涵盖源码逐行审查 + 真实 CKB-VM 攻击探针 + 本地链/测试网实链验证；**69 个测试**在当前二进制上全部通过。审计发现的高危漏洞（小费关闭他人农场）及全部三项中危问题（历史区块头按天步进重置计数、同笔放草拔草零状态变化活性 DoS、`shutdown.ts` 跨 `unit` 漏检）**均已修复并在本地链与测试网上线**；ACP / OmniLock-ACP 强关风险（GN-01）已在官方前端禁止开垦缓解。核心遗留：部署钥匙仍是单把热钥匙、使坏上限按农场计（低危）。**没有部署到主网**；这些是模型审计，不等同第三方审计公司。
 
 玩法是经典的社交农场那一类，但这是一个原创游戏：名字、美术、数值和界面都是这个项目自己的，没有使用任何现成游戏的素材。
 
@@ -140,7 +140,7 @@ npm run build                     # 类型检查并打包
 - **type-id 校验器 cell**：锁是全零哈希（永远打不开），代码 cell 的 type script 就是它。它保证代码 cell 的 type id 只此一份、升级时不会漂移。
 - **代码 cell**：锁是部署者的锁，data 是农场二进制。农场 cell 用 `hash_type: "type"` 引用代码 cell 的 type script 哈希，所以升级后所有农场原地运行新代码。
 
-当前版本：代码 cell 交易 `0x130bdcf7c8b9b4c5b4b81c3ab5b05ecc9d3b402b5cc780bfc51d6dbb2f3742c7`，引用哈希（code script hash）`0x0253fea2b3d45853c5381fb20ed7efffce8f79cfbb059e1ea3befddf299f775d`，版本哈希 `0xec8803d81c086f93e41335e74b375ba506d3ce54abd8cf354c26ac7c9469cad4`，游戏时速 3600 秒/小时。这是含 close 修复和"关闭中的农场不能当访客"修复的二进制，2026-11-23 升级，升级后核对过链上数据哈希与 `build/farm` 一致，并在测试网真实节点上实测攻击被拒（错误码 54）。升级后要重新发布网页，旧页面记的代码 cell 位置已失效。最新记录以 `web/src/chain/deployments.json` 为准。网页默认跑测试网；跑本地链则在 `web/.env` 里写 `VITE_NETWORK=devnet`。
+当前版本：代码 cell 交易 `0xcb92cb0103c87b76d7be2a7cb2010eb36074c021339cd6417b0c39a9dc454df5`，引用哈希（code script hash）`0x0253fea2b3d45853c5381fb20ed7efffce8f79cfbb059e1ea3befddf299f775d`，版本哈希 `0x4e2dc6328519ad576cb9963f7693ae2a9b4ebc914c555bd5793975fd3a4055bf`，游戏时速 3600 秒/小时。2026-11-23 原地升级上线，包含 close 双条件修复、closing-visitor 守卫（错误码 54）、历史区块头按天步进防护（OPEN-03）及同笔放草拔草/零状态变化防护（OPEN-04），前端已同步构建发布至 Cloudflare Pages 并禁止 OmniLock-ACP / ACP 地址开垦（OPEN-01 缓解）。最新记录以 `web/src/chain/deployments.json` 为准。网页默认跑测试网；跑本地链则在 `web/.env` 里写 `VITE_NETWORK=devnet`。
 
 测试网用 CCC 的钱包连接器登录：网页上是"连接钱包"按钮，支持 JoyID、MetaMask、OKX、UniSat 等。钱包需要有测试网 CKB（[水龙头](https://faucet.nervos.org/)）才能付手续费和创建农场 cell。本地链仍使用内置测试账户，不需要钱包。
 
@@ -214,10 +214,10 @@ npm run build && npm run deploy:pages   # 前端记录更新后重新发布网�
 - **没有部署到主网。** 只有本地链和测试网。
 - **主网客户端接线已修复（审计 R3-F4）。** `createClient("mainnet")` 现在返回 `ClientPublicMainnet` 连主网 RPC；`key.ts` 走同一入口。仍未做的是用真实钱包在主网完整走一遍（主网合约也尚未部署）。
 - **没有用真实钱包私钥在浏览器里登录过。** CCC 钱包选择器已接好，但这里没有 JoyID、MetaMask 等钱包的私钥；测试网交易用私钥账号验证过。
-- **已审计：多份模型审计**，最新的是 [AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮，2026-11-23）与 [AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2，2026-11-23），另有 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)。含 CKB-VM 攻击探针与实链验证；属模型审计，没有第三方审计公司复核。在放真钱之前请当它是实验品。已知问题见下。
+- **已审计：四份模型审计汇总见 [AUDIT.md](AUDIT.md)**，含 [AUDIT-gemini-4-neon.md](AUDIT-gemini-4-neon.md)（Gemini 4 Neon，2026-11-23）、[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮）、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2）与 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)（glm-5.3-flash）。含 69 项 CKB-VM 攻击探针与实链验证；属模型审计，没有第三方审计公司复核。在放真钱之前请当它是实验品。
+- **【已修复上线】历史区块头按天步进重置计数（OPEN-03 / GN-03）与同笔放草拔草零状态变化 DoS（OPEN-04 / FB-5 / GN-05）。** 访客参与每日计次操作必须附带自身提交区块头锚定时间且 `OP_MISCHIEF` 要求 `now >= planted_at`；禁止同笔交易放草后拔草，且纯访客交易必须产生实际状态变化（否则报 51）。`shutdown.ts` 退场扫描已改为全量 `args: "0x"`（OPEN-05）。
 - **【部分修复，低危】每日使坏上限（Fable 5.2 报告 FB-2、FB-3）。** 在关闭自己农场的那笔交易里放草放虫不计次数——这一条已修（合约以错误码 54 拒绝），本地链和测试网都已上线。没修的是：同一玩家的第二座农场另有 30 次。硬边界是每块地每季最多一草一虫。不涉及 CKB。
-- **【未修】陌生人可以反复碰你的农场 cell（FB-5）。** 放一棵草再拔掉，农场状态不变但 cell 换了位置，你在途的交易（包括关闭）会作废，需要重发。对方只付手续费，拿不到任何东西。
-- **【已修复上线】close 授权的"小费"伪造（审计 R3-F1）。** 第二轮的方向授权在关闭路径可被小费伪造（给主人锁转 61 CKB 即满足"主人收钱"，攻击者净赚约 270 CKB）。修复改为**双条件**：close 要求 owner 锁的 cell 在输入中（强签名锁 = 主人签了整笔交易）**且**被关闭农场的押金全额流回 owner（只允许 ≤1 CKB 的手续费差）。多座农场同时关闭时押金合并计算，一份退款不能替两次关闭作保。探针 `r3_stranger_closes_farm_for_a_tip` 等三例全部转为拒绝。**对 ACP 锁残留**：攻击者自掏押金赠回 owner 可强制关闭（纯亏本破坏，受害者资金无损），与 glm 报告 V1 残留一致。
+- **【已修复上线 / ACP 前端拦截缓解】close 授权与 ACP 锁（R3-F1 / GN-01）。** close 采用双条件（owner 锁输入在场 + 押金合并全额回流 owner，差额 ≤1 CKB），强签名锁完全防盗。对于 ACP / OmniLock-ACP 锁用户，Gemini 4 Neon 指出陌生人仍可借 1 CKB 手续费容差无签名强制关场并套利 ~0.9999 CKB；**官方前端现已禁止 OmniLock-ACP、AnyoneCanPay 及 AlwaysSuccess 地址开垦农场**（保留已有农场关场能力）。
 - **【已修复上线】放草-帮忙循环白刷经验（审计 R3-F2）。** 修复后帮助经验**只计自然问题**的清除：清他人放的草仍是善行（交易有效、计入每日帮助次数）但不再给经验，同笔交易的放草-拔草循环收益归零。回归探针断言零经验（`probe_exp_from_clearing_own_mischief`）。
 - **防偷 Sybil 已修复（按 owner 锁哈希计槽位），狗仍可研磨（审计 R3-F3）。** 同一玩家多座农场偷不到第二次（回归验证通过）；但狗判定是 (owner, 公开 seed) 的确定性函数，新钱包钥匙可离线研磨避开（实测约 3 万次尝试）。40% 总上限仍是唯一硬边界，应理解为"每季固定上限损失"。
 - **批量串门 O(n²) 已由客户端拆单缓解（≤24 座/笔）。** 合约层成本未变；第三方客户端仍可自行撞上限。

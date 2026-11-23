@@ -496,12 +496,14 @@ function Claim({ game }: { game: Game }) {
   const [name, setName] = useState("");
   const poor = game.balance !== undefined && game.balance < 400n * 100_000_000n;
   const noWallet = game.accounts.length === 0 && !game.wallet.connected;
+  const blockedLock = game.unsupportedLock;
   const catalog = game.catalog;
   return (
     <form
       className="card claim"
       onSubmit={(e) => {
         e.preventDefault();
+        if (blockedLock) return;
         game.create(name.trim() || "我的农场");
       }}
     >
@@ -535,12 +537,17 @@ function Claim({ game }: { game: Game }) {
           {t("connectWallet")}
         </button>
       ) : (
-        <button className="btn big" disabled={!!game.busy || poor}>
+        <button className="btn big" disabled={!!game.busy || poor || !!blockedLock}>
           {game.busy ?? t("createFarm")}
         </button>
       )}
       {noWallet && <p className="drawer-note">{t("walletHint")}</p>}
-      {!noWallet && poor && (
+      {!noWallet && blockedLock && (
+        <p className="warn">
+          {t(blockedLock === "omnilock-acp" ? "unsupportedOmnilockAcp" : "unsupportedAcpLock")}
+        </p>
+      )}
+      {!noWallet && !blockedLock && poor && (
         <p className="warn">
           {t("poor")}
           {game.network.faucet ? (

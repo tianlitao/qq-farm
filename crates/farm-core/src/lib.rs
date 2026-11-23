@@ -667,6 +667,10 @@ fn run_actions(
 ) -> Result<bool> {
     let Clock { now, unit } = clock;
     let mut owner_acted = false;
+    // Tracks friend weeds/pests placed during this very transaction so a
+    // visitor cannot plant and pull the same problem in one tx to churn the
+    // host farm's outpoint without changing its state.
+    let mut mischief_this_tx = [0u8; MAX_PLOTS];
     let mut r = Reader { bytes: input.actions, at: 0 };
     while !r.done() {
         let op = r.u8()?;
@@ -780,6 +784,8 @@ fn run_actions(
                 // feed each other weeds for ever.
                 if clear_problem(farm.plot_mut(idx)?, kind, now, unit)? {
                     farm.add_exp(EXP_CLEAR);
+                } else {
+                    mischief_this_tx[idx as usize] &= !friend_flag(kind);
                 }
             }
             OP_RENAME => {
@@ -802,6 +808,10 @@ fn run_actions(
                 let credit = match op {
                     OP_HELP => {
                         let kind = r.u8()?;
+                        let friend = friend_flag(kind);
+                        if friend != 0 && (idx as usize) < MAX_PLOTS && mischief_this_tx[idx as usize] & friend != 0 {
+                            return Err(Error::BadAction);
+                        }
                         // Experience only for nature's problems: what a
                         // neighbour (or this very transaction) planted earns a
                         // helper nothing.
@@ -821,10 +831,14 @@ fn run_actions(
                         if plot.is_withered() {
                             return Err(Error::Withered);
                         }
+                        if !plot.is_pending() && now < plot.planted_at {
+                            return Err(Error::NeedTime);
+                        }
                         if plot.flags & flag != 0 {
                             return Err(Error::AlreadyThere);
                         }
                         plot.flags |= flag;
+                        mischief_this_tx[idx as usize] |= flag;
                         Credit::Mischief
                     }
                     _ => {
@@ -887,8 +901,9 @@ pub fn transition(farms: &[FarmInput], me: usize, clock: Clock) -> Result<Outcom
     let mut farm = open(mine)?;
     let mut needs_owner = run_actions(&mut farm, mine, farms, clock, &mut |_, _| Ok(()))?;
 
+    let mut needs_daily_anchor = false;
     for (i, other) in farms.iter().enumerate() {
-        if i == me {
+        if i == me || other.actions.is_empty() {
             continue;
         }
         // Replay the other farm only to learn what it owes this one. Whether
@@ -898,11 +913,23 @@ pub fn transition(farms: &[FarmInput], me: usize, clock: Clock) -> Result<Outcom
         run_actions(&mut theirs, other, farms, clock, &mut |actor, credit| {
             if actor == mine.index {
                 visited = true;
+                if matches!(credit, Credit::Help { .. } | Credit::Mischief) {
+                    needs_daily_anchor = true;
+                }
                 apply_credit(&mut farm, credit)?;
             }
             Ok(())
         })?;
         needs_owner |= visited;
+    }
+    // Daily-capped visits (help, mischief) must anchor `clock.now` to the
+    // visitor farm's own committing block header, preventing a farm from
+    // stepping through historical block headers to reset `day` repeatedly.
+    if needs_daily_anchor {
+        let block = mine.block.ok_or(Error::MissingHeader)?;
+        if block.timestamp == 0 || clock.now < block.timestamp {
+            return Err(Error::MissingHeader);
+        }
     }
     Ok(Outcome { farm, needs_owner })
 }

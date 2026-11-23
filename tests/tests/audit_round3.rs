@@ -221,13 +221,24 @@ fn r3_help_exp_mischief_loop() {
         actions.extend(act::mischief(1, 0, KIND_WEED));
         actions.extend(act::help(1, 0, KIND_WEED));
     }
-    let cells = w.play(&[(&ann, &actions), (&bob, &[])], &[2], Some(now), now + 5);
-    println!(
-        "R3-F2 {}: mischief-help loop, visited unchanged={}, visitor exp={} per tx",
-        if cells[1].farm().exp > 0 { "VULNERABLE" } else { "ok" },
-        cells[0].state == ann.state,
-        cells[1].farm().exp
-    );
+    match w.draft(&[(&ann, &actions), (&bob, &[])], &[2], Some(now)) {
+        Err(e) => println!("R3-F2 ok: mischief-help loop refused by rules ({e:?})"),
+        Ok(draft) => {
+            let tx = w.build(&draft);
+            match w.verify(&tx) {
+                Err(e) => println!("R3-F2 ok: mischief-help loop refused by script ({e})"),
+                Ok(_) => {
+                    let cells = w.commit(&draft, &tx, now + 5);
+                    println!(
+                        "R3-F2 {}: mischief-help loop, visited unchanged={}, visitor exp={} per tx",
+                        if cells[1].farm().exp > 0 { "VULNERABLE" } else { "ok" },
+                        cells[0].state == ann.state,
+                        cells[1].farm().exp
+                    );
+                }
+            }
+        }
+    }
 }
 
 /// R3-F3: dog verdict is still grindable. The seed is public after settle and

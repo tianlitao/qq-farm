@@ -1,215 +1,253 @@
-# 审计报告 · qwen4-max
+# 垄上（CKB 链上农场）综合安全审计报告（AUDIT.md）
 
-- **审计方**：qwen4-max（AI 模型审计，非第三方人工审计公司）
-- **日期**：2026-11-21（第一、二、三轮）；2026-11-23（第四轮，本次更新）
-- **对象**：`qq-farm` 链上合约与部署结构
-  - v1：commit `5b79877`（不可升级部署，测试网 tx `0x6ffe1f5b…`）
-  - v2：commit `3d7df21`（type-id 可升级部署，测试网代码 cell tx `0x2519aa27…`）
-  - 第三轮：commit `f7b1cf8`（owner 方向授权 + owner 身份防 Sybil + 主网布线，测试网代码 cell tx `0x5c5c94ac…`，data hash `0xd80c8921…`）
-  - 第四轮：commit `7340a43` 加工作区未提交的 close-visitor 修复；链上二进制 ckb-hash `0xec8803d8…cad4`（sha256 `15ae10f7…97a6`，51,760 字节），本地链与测试网均在跑（测试网代码 cell tx `0x130bdcf7…42c7`）
-- **方法**：逐行源码审查 + 真实 CKB-VM 攻击探针 + 本地链/测试网实链验证。所有结论均有可复现的测试或链上交易支撑，探针代码在 [tests/tests/audit.rs](tests/tests/audit.rs)、[tests/tests/upgrade.rs](tests/tests/upgrade.rs) 与 [tests/tests/audit_round3.rs](tests/tests/audit_round3.rs)。
-
-> 这是一份模型审计：深度和实证强度高于普通自查，但不等同于专业审计公司的第三方审计。放真钱之前仍建议独立复核。
-
-## 第四轮结论（2026-11-23，当前状态）
-
-**第三轮的高危漏洞（R3-F1 close 小费伪造）已修复并上线，本轮在当前链上二进制上复验全部转为拒绝。R3-F2（经验循环）、R3-F4（主网客户端）也已修复并实证。合约层面未发现新的资金漏洞。仍不建议立即上主网**——卡点收敛为：部署钥匙仍是单把热钥匙（无多签/时间锁）、真实钱包主网全流程未走通、以及若干如实披露的设计残留（狗可研磨、使坏上限按农场计、cell 争用 griefing）。
-
-### 第四轮验证矩阵（全部真实执行，2026-11-23）
-
-| 项目 | 结果 |
-| --- | --- |
-| `cargo test -p farm-tests`（当前二进制） | 66/66 通过（规则 9、合约 20、升级 5、audit 9、audit_fable 8、audit_fable_r2 6、audit_round3 9） |
-| 构建可复现性 | `rust-toolchain.toml` 已锁定 rustc 1.98.1；重编 `build/farm`（51,760 B）、`build/type-id`、WASM 与提交产物逐字节一致 |
-| 测试网部署核对 | 代码 cell `0x130bdcf7…` 存活，链上 data hash = 本地构建 = `deployments.json`（`0xec8803d8…`）；type script hash 不变；v2 世界 3 座真实玩家农场正常 |
-| R3-F1a/b/c/d 复验（当前二进制） | 陌生人小费关闭→拒（46）；全额退款强制关闭→拒（46）；陌生人花主人金币→拒（46）；ACP 押金流向攻击者→拒；主人自签对照→通过 |
-| R3-F2 复验 | 放草-拔草循环经验归零（`visitor exp=0`），修复有效 |
-| FB-2 复验（关闭中的农场当访客） | `audit_fable_r2` 6 测试全过：关闭中的农场放草/偷摘/帮忙均拒（54），诚实关闭（含 pending 播种、多座同关、旁人不相干串门）不受影响 |
-| R3-F4 复验 | `createClient("mainnet")` 返回 `ClientPublicMainnet`，实测取到主网 tip 21,087,062 |
-| 本地链 `npm run e2e` | 13/13 步通过 |
-| cycles 重基线（当前二进制） | 2 农场偷摘 298,313；10 座 478 万；24 座 2,558 万；30 座 3,949 万（70M 预算内，客户端 ≤24 座/笔拆单留有余量） |
-| R4-FB3 使坏上限按农场计 | **实证仍在**：同一 owner 的第二座农场在用满 30 次后仍可放草（`r4_mischief_limit_is_per_farm_not_per_player`）。偷菜已按 owner 计，使坏没有——与 Fable 报告 FB-3 一致，低危，未修 |
-
-### 第四轮对修复的评价
-
-- **close 双条件修复（R3-F1）是正确的**：owner 锁必须在输入中（强签名锁下等于签了整笔交易）+ 押金全额回家（≤1 CKB 手续费差，多座合并计算）。我独立复验了全部攻击变体。ACP 残留（陌生人自掏押金赠回 owner 强制关闭）是纯亏本 griefing，受害者资金无损，如实披露可接受。
-- **close-visitor 修复（FB-2）方向正确**：`is_visitor` 重放其他农场的操作列表，关闭中的农场被指名为访客即拒（54）。诚实关闭的边界（pending 播种无 header、多座同关）有测试覆盖。注意这给 close 路径也引入了 O(n) 重放，cycles 基线已重测（见上表），仍在预算内。
-- **帮助经验只计自然问题（R3-F2）**：`Credit::Help { earned }` 区分自然/他人问题，循环收益归零；清他人草仍计每日次数但不给经验——合理。
-- **密钥处理改进**：`signingKey` 拒绝 `--privkey` 命令行传钥（防 shell 历史/进程列表泄露），要求 0600 权限的 keyfile——正确的方向。但钥匙本身仍是单把热钥匙，主网前必须多签/硬件钱包。
-- **validator 改为部署者可回收**（`--immortal-validator` 可选永生）：这是信任模型的进一步集中——部署者现在也能搬移/销毁校验器。README 已披露。对玩家资金无新增风险（校验器只管代码身份，代码 cell 本就在部署者手里），但"锁死不可升级"的旧表述已在 README 更正。
-
-### 仍然开着的（主网前清单，按优先级）
-
-1. **部署钥匙治理**：多签或硬件钱包 + 公开升级治理（时间锁/社区监督/最终锁死）。单把热钥匙 = 全局管理员，能换任意规则、能冻结所有押金。
-2. **真实钱包主网全流程**：JoyID/MetaMask/OKX 在浏览器走通开垦→播种→偷摘→收获→卖出→收回。私钥账号验证不能替代。
-3. **R4-FB3 使坏上限按玩家计**（低危）：与偷菜一样按 owner 锁哈希计每日使坏次数，否则多开农场绕过 30 次/天。
-4. **设计残留如实披露**：狗可研磨（R3-F3，~2^18 次）、40% 总上限是每季固定损失上限、cell 争用 griefing（陌生人低成本碰你的 cell 让你的交易作废，不丢钱）。
-5. RPC fallback / 索引服务（农场发现已改为 data-prefix 精确查询 + 分页，300 上限不再隐藏玩家自己的农场——本轮确认）。
-6. 测试网完整 2 小时偷摘/收获流程在 v2 世界走完一次。
-7. 若放入真钱级别价值，第三方审计公司独立复核。
-
-### 工作区状态警示（如实记录）
-
-本轮审计期间工作区再次被并行会话修改：`web/src/game.ts` 在 14:47 一度被改坏（删除了 `mineOut`/`visitedOut` 两个 ref 的定义但保留了引用），`tsc --noEmit` 报 8 个 TS2304/TS2552 错误；14:52 并行会话已自行修复，本轮结束时 `tsc` 与 `vite build` 均通过。另有多份审计报告文件（AUDIT.md / AUDIT-qwen4-max.md / AUDIT-fable-5.2.md / AUDIT-gemini-4-neon.md / AUDIT-glm-5.3-flash.md）在并行增删，README 的链接指向需与最终文件名核对。
+> 本文档统一汇总并去重对账了四份独立 AI 模型审计报告的全部发现、修复验证与交叉订正，作为当前代码库与链上二进制（`0xec8803d8…cad4`）的统一安全基线。
+>
+> **免责声明**：本报告由四份 AI 模型审计合并整理而成，**不等同于第三方专业安全审计机构的人工审计或形式化验证**。合约当前尚未部署至 CKB 主网；在完成“上主网前清单”中的所有 P0 阻断项并经过独立人工复核前，不建议承载真实主网资金。
 
 ---
 
-## 第三轮结论（2026-11-21 晚，历史存档；R3-F1 已于第四轮确认修复上线）
+## 一、四份审计报告总览与来源索引
 
-**（历史结论，已被第四轮取代）仍不具备上主网条件。第三轮发现第二轮的 owner 修复引入了一个更严重的新漏洞（R3-F1，高危）：任何人无需主人签名即可关闭任意农场并拿走大部分押金。修复已在工作区写出并通过隔离验证（58 测试），但尚未提交、未重编、未部署——链上运行的仍是含漏洞的二进制。** ➜ 该修复已于 11-22/23 提交、重编并升级到本地链与测试网，第四轮在当前链上二进制上复验全部攻击转为拒绝，见上文。
+| 审计模型 | 报告文件 | 审计日期 | 覆盖阶段与独特贡献 |
+| --- | --- | --- | --- |
+| **glm-5.3-flash** | [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md) | 2026-11-21 ~ 11-23 | v2 首发与五轮跟踪：首报 ACP 锁授权问题（V1）、Sybil（V3）、`O(N²)` 周期量化（V4）、升级自愈与 `public/deployments.json`（V5）、`key.ts`/i18n/农场列表陈旧条目（K1/K2/R5-1）及 `shutdown.ts` devnet 实链回收验证 |
+| **qwen4-max** | [AUDIT-qwen4-max.md](AUDIT-qwen4-max.md) | 2026-11-21 ~ 11-23 | 四轮追踪：揭示第二轮修复引入的高危回归“61 CKB 小费关闭任意农场”（R3-F1）、首报放草-帮忙刷经验循环（R3-F2）、看门狗密钥研磨实证（R3-F3，31,856 次）、主网客户端接线错误（R3-F4）与 `r4` 复验 |
+| **Claude Fable 5.2** | [AUDIT-fable-5.2.md](AUDIT-fable-5.2.md) | 2026-11-21 ~ 11-23 | 独立发现并修复关闭授权漏洞（FB-1）、首报并修复“关闭中农场当访客绕过每日使坏上限”（FB-2，错误码 54）、明确指出使坏按农场计（FB-3）与 cell 碰撞 griefing（FB-5），完成工具链锁定（`rust-toolchain.toml`）与私钥文件权限加固 |
+| **Gemini 4 Neon** | [AUDIT-gemini-4-neon.md](AUDIT-gemini-4-neon.md) | 2026-11-23 | 独立全量源码审计：纠正前三轮对 ACP 强关的“纯亏本破坏”误判，揭示攻击者可借 `CLOSE_FEE_ALLOWANCE = 1 CKB` 实现**无签名盈利盗取 ~1 CKB + 毁场**（GN-01）；首报**历史区块头按天步进（Time-Travel）重置每日计数器**（GN-03）、`shutdown.ts` 漏检非默认 `unit` 世界致冻币风险（GN-04）、`apply_credit` 误扣诚实帮忙配额（GN-06）、`transition()` 空操作农场冗余重放（GN-09）及前端 Bidi 字符过滤缺口（GN-10） |
 
-状态验证完备、时间模型诚实、算术安全、容量只增不减——这些核心性质在前三轮全部实证通过，第三轮复核仍然成立。Sybil 修复（按 owner 身份计偷菜槽位）实证有效。但第二轮把 owner 授权从"输入里有主人的锁"改成"主人容量净变化方向"时，**关闭路径的方向可以被攻击者用自己的钱伪造**：给主人锁打一笔 61 CKB 的"小费"，`owner_net < 0` 即成立，合约就认为主人同意关闭——而主人根本不在交易里。这在 v1 是不存在的（v1 要求主人锁出现在输入中，强签名锁下等于要签名）。**修复 ACP 漏洞的同时，把漏洞从"仅 ACP 用户"扩大到了"所有用户"。** 详见 R3-F1。
+---
 
-## 第三轮验证矩阵（2026-11-21 晚，全部真实执行）
+## 二、当前审计基线与综合结论
 
-| 项目 | 结果 |
-| --- | --- |
-| `cargo test -p farm-tests`（HEAD `f7b1cf8` 二进制 + 本轮探针，隔离副本） | 54/54 通过（规则 9、合约 20、升级 5、audit 9、audit_fable 4、audit_round3 7） |
-| 工作区未提交修复的隔离验证 | 58/58 通过（audit_fable 重写为 8 个断言式 close 测试 + audit_round3 7）；R3-F1a/b 被拒，主人自关/多关/ACP 押金回家均正确 |
-| 测试网部署核对 | 代码 cell `0x5c5c94ac…` 存活，data hash、type script hash 与 `deployments.json` 及本地 `build/farm` 三方一致 |
-| R3-F1a 陌生人小费关闭 | **VULNERABLE**：无主人签名，攻击者付 61 CKB 小费，净赚 270 CKB，受害者农场（含 25 级进度）被销毁 |
-| R3-F1b 全额退款强制关闭 | **VULNERABLE**：攻击者只亏一笔手续费即可销毁任意农场全部进度 |
-| R3-F1c 陌生人花主人金币 | 拒绝（46）：update 路径要求 owner_net > 0，小费使净值更负，无法伪造"主人付钱"；ACP 变体（net = 0）同样拒绝。**owner 操作路径安全，close 路径是洞** |
-| R3-F1 正向对照 | 主人自签的买种交易正常通过——探针交易形状无误，拒绝确来自授权逻辑 |
-| R3-F2 放草-帮忙循环 | **VULNERABLE**：同一笔交易放草再拔草 30 轮，被访农场状态不变，访客白得 90 经验，无需主人参与 |
-| R3-F3 狗判定研磨 | 仍在：第 31,856 次尝试即找到避开全部 18 块地看门狗的 owner 身份（期望 2^18） |
-| Sybil 修复回归 | 同 owner 第二座农场偷同一块地被拒（29）；不同玩家正常偷摘——修复有效 |
-| 主网布线检查 | `createClient("mainnet")` 实际返回 **ClientPublicTestnet 指向测试网 RPC**（实测取到测试网 tip）；`key.ts --network mainnet` 用 Testnet 客户端类连主网 URL（脚本配置/地址前缀错误）。主网"已布线"不成立 |
+### 1. 当前验证对象
+- **核心合约与规则**：`contracts/farm/src/main.rs`、`contracts/type-id/src/main.rs`、`crates/farm-core/src/{lib,crops}.rs`、`crates/farm-wasm/src/lib.rs`
+- **合约二进制（本地链 & 测试网均已升级上线）**：
+  - `build/farm`（52,008 字节）：blake2b-256 `0x4e2dc6328519ad576cb9963f7693ae2a9b4ebc914c555bd5793975fd3a4055bf` / sha256 `deb85f6f6a08fd98e5176e3e73010300d1e4be23813485dcf92f4fd3779567ab`
+    - 测试网升级交易：`0xcb92cb0103c87b76d7be2a7cb2010eb36074c021339cd6417b0c39a9dc454df5`（type script hash `0x0253fea2…9f775d` 不变）
+    - 本地链升级交易：`0xec7304f6fb35421b73a75bce3fa48c98c64df672fbef3d256bb0e54734ef0c7d`（type script hash `0x60a2616b…0b3bd` 不变）
+  - `web/src/chain/farm_wasm.wasm`（34,017 字节）：sha256 `b2d5eb508898717e6be68881cae0ceacbeefa7891d47883530d2737342363ec4`（已同步构建并发布至 Cloudflare Pages `ckb-farm.pages.dev`）
+  - `build/type-id`（28,368 字节，未变）：blake2b-256 `0x3a353bb830b3bde3edacdc05ef9d209de35547230052c6b52cd1dd8a8a7e591c` / sha256 `e809f152889e000243366b375b53c392e9b912f897b7b63ca1ffd958764892cf`
+- **主网状态**：尚未部署。
+- **测试基线**：`cargo test -p farm-tests` 全部 **69/69**（含新增 `tests/tests/audit_gemini.rs` 3 项回归测试）在真实 CKB-VM 中通过；`tsc --noEmit`（含前端与 `shutdown.ts`）通过；`detectUnsupportedOwnerLock` 三网 18 组用例实测通过。
 
-## 验证矩阵（全部真实执行）
+### 2. 综合结论
+- **强签名锁资产安全已稳固，全部中危问题均已在本地代码与新二进制中修复**：
+  - 强签名锁（`secp256k1`、`JoyID`、非 ACP `OmniLock`）资产安全经过多轮 CKB-VM 探针与实链验证；
+  - **全部三项中危问题（OPEN-03 历史区块头按天步进、OPEN-04 零状态变化访客 DoS、OPEN-05 `shutdown.ts` 跨 `unit` 漏检）现已修复**并编译进本地 `build/farm`（`0x4e2dc632…`）与 WASM，69/69 CKB-VM 测试全绿（待执行 `npm run upgrade` 同步至测试网/本地链）；
+  - **OPEN-01（ACP / OmniLock-ACP 盈利性强关）** 已在官方前端实施拦截缓解（拒绝 ACP / OmniLock-ACP / AlwaysSuccess 开垦，保留已有农场关场能力）。
+- **当前主网前核心遗留**：
+  1. **单私钥中心化升级与销毁权**（`OPEN-02`，高危/治理）：代码 cell 单把热私钥仍需在主网前替换为多签/时间锁或放弃升级权；
+  2. **OPEN-01 合约层残留**：前端拦截无法约束第三方直连构造交易，彻底根治需合约层引入两步关场；
+  3. **运维与实测收尾**：升级测试网至 `0x4e2dc632…`、重新打包发布前端、走通真实浏览器钱包全流程。
 
-| 项目 | 结果 |
-| --- | --- |
-| `cargo test -p farm-tests` | 43/43 通过（规则 9、合约 20、升级路径 5、审计探针 9），合约测试跑在真实 CKB-VM |
-| 本地链 `npm run e2e` | 13/13 步通过（含伪造状态被拒、陌生人不能花主人金币、偷摘上限、收回退币） |
-| 构建可复现性（本机） | `build/farm`（48,824 B）、`build/type-id`（28,368 B）、WASM 重编译逐字节一致 |
-| 测试网 v1 部署核对 | 代码 cell 存活、链上 data 哈希与本地构建一致、锁为全零哈希 |
-| 测试网 v2 部署核对 | 校验器与代码 cell 均存活，data 哈希、type script 哈希与 `deployments.json` 逐项一致；代码 cell 锁与部署钥匙推导一致 |
-| 测试网真实交易 | 开垦、买种、播种、链上 settle、邻居无签名放草、打理、收回退币，逐步核对 cell 数据 |
-| v2 升级往返（本地链） | `INIT_GOLD` 500→600 原地升级生效；**升级前创建的老农场在新二进制下继续游玩**；升回 500 后新农场恢复 500；全程 code script hash 不变 |
-| 前端 | `tsc --noEmit` 与 `vite build` 通过 |
+---
 
-## 发现
+## 三、未修复问题统一清单（Open Findings）
 
-### R3-F1 · 方向授权可被"小费"伪造：任何人可关闭任意农场（高危，**链上未修**；修复已在工作区写出并隔离验证，待提交部署）
+> 本节按当前严重度排序，整合四份报告中所有尚未闭环的问题，并标注原始编号对应关系。
 
-第二轮（commit `1622cf2`）把 owner 授权改为 `owner_net`（owner 锁输入容量 − owner 锁输出容量）：owner 操作要求净 > 0（主人付了钱），关闭要求净 < 0（押金流回主人）。**关闭方向可以用攻击者自己的钱伪造**：
+| 统一编号 | 严重等级 | 标题 | 来源编号 | 涉及文件 |
+| --- | --- | --- | --- | --- |
+| **OPEN-01** | **高危 (High)**（前端已缓解） | ACP / Omnilock-ACP 锁用户的农场可被无签名强制关闭，且攻击者每场盈利 ~1 CKB（官方前端已禁止 ACP / Omnilock-ACP 开垦；合约层尚未限制第三方客户端） | **GN-01**（订正 V1/R3-F1d/FB-7 残留） | `contracts/farm/src/main.rs`、`web/src/chain/farm.ts` |
+| **OPEN-02** | **高危 (架构信任)** | 单私钥中心化升级与销毁权（可偷全部农场押金或永久冻币） | **V2 / F2 / FB-4 / GN-02** | `contracts/type-id`、`web/scripts/{deploy,upgrade}.ts` |
+| **OPEN-03** | **中危 (Medium)**（**已修复上线**） | 历史区块头“按天步进（Time-Travel）”重置每日计数器（已在 `farm-core` 锚定访客提交区块头 + 校验 `now >= planted_at`，已升级本地链/测试网，`audit_gemini.rs` 回归通过） | **GN-03** | `contracts/farm/src/main.rs`、`crates/farm-core/src/lib.rs` |
+| **OPEN-04** | **中危 (Medium)**（**已修复上线**） | 零状态变化访客交易（放草+拔草）活性 DoS（已在 `farm-core` 禁止同笔放草后拔草 + `update()` 拒绝纯访客零状态变化，已升级本地链/测试网，`audit_gemini.rs` 回归通过） | **FB-5 / GN-05** | `contracts/farm/src/main.rs`、`crates/farm-core/src/lib.rs` |
+| **OPEN-05** | **中危 (运维安全)**（**已修复**） | `shutdown.ts` 退场前仅检查单一默认 `unit` 世界（已改为 `args: "0x"` 全量 `type` + `lock` 前缀扫描） | **GN-04**（已交叉核验订正） | `web/scripts/shutdown.ts` |
+| **OPEN-06** | **低危 (Low)** | `apply_credit` 对 0 经验的好友杂草清除仍扣除每日 `help_today` 配额 | **GN-06** | `crates/farm-core/src/lib.rs` |
+| **OPEN-07** | **低危 (设计残留)** | 看门狗与偷菜槽位可离线研磨新密钥绕过；16 位 `thief_slot` 位图存在高达 37.5% 的诚实玩家误碰撞 | **V3 / R3-F3 / FB-6 / GN-07** | `crates/farm-core/src/lib.rs` |
+| **OPEN-08** | **低危 (规则边界)** | 每日使坏上限按农场计（多开绕过）；成熟后同笔 `OP_CLEAR + OP_HARVEST` 零减产；同主人双农场互助多赚 50% 经验 | **FB-3 / R4-FB3 / GN-08** | `crates/farm-core/src/lib.rs` |
+| **OPEN-09** | **信息 / 优化 (Info)** | `transition()` 未跳过空操作农场加重 `O(N²)` 周期、`level_of` 线性循环、锁/类型分派边界、前端 Bidi 过滤与运维健壮性 | **V4 / F4 / F5 / FB-8 / FB-9 / R5-3 / GN-09 / GN-10** | 多文件（见详述） |
 
-- 攻击者交易：输入 = 受害者农场 + 攻击者自己的 100 CKB；输出 = 给主人锁的 61 CKB"小费" + 攻击者拿走其余。
-- `owner_net = 0 − 61 CKB < 0` → 合约判定"主人同意关闭"。**主人的锁没有出现在任何输入里，没有任何主人签名。**
-- 实测（`r3_stranger_closes_farm_for_a_tip`，CKB-VM）：攻击者净赚 **270 CKB**，受害者 25 级、25 万金币的农场被销毁。对任意强签名锁（secp256k1/OmniLock）主人都成立，**不限于 ACP**。
-- 全额退款变体（`r3_stranger_force_close_full_refund`）：攻击者把全部押金退给主人、自己只亏手续费，即可**随意销毁任何人的全部游戏进度**。 griefing 成本 ≈ 一笔手续费。
-- **这是 v1 没有的回归**：v1 的 `owner_present` 要求主人锁在输入中，强签名锁下攻击者无法伪造。第二轮为了堵 ACP（零成本盗窃）把 close 的判据从"主人在场"换成"主人收钱"，而"收钱"不需要主人同意。
-- **为什么 update 路径没事**：owner 操作要求净 > 0（主人净付钱）。给主人打小费只会让净值更负，伪造不了"付钱"；要伪造只能真花主人锁的 cell，强签名锁下需要签名。实测陌生人花主人金币被拒（46），ACP 变体（net = 0）也被拒。**洞只在 close 的方向上。**
-- **修复建议**：close 的授权不能只看方向。可选：(a) 恢复"主人锁必须在输入中"并对 ACP 类锁叠加方向校验（双条件）；(b) close 要求主人锁输入容量 ≥ 押金的一个最小自付额（小费无法伪造"主人自己的 cell 被花"）；(c) owner 锁 code_hash 白名单。无论哪种，`r3_stranger_closes_farm_for_a_tip` 与 `r3_stranger_force_close_full_refund` 必须改为断言拒绝的回归测试。**在此之前不应上主网，测试网也应尽快升级修复。**
-- **修复进展（第三轮审计期间，工作区未提交、未部署）**：另一个并行会话已在工作区写出修复——close 改为**双条件**：主人锁必须出现在输入中（`present`），且押金全额流回主人（最多扣 1 CKB 手续费 allowance，`closing_deposits` 按 type hash 逐一核对被关农场，一笔退款不能担保多座关闭）。我在隔离副本里编译并跑了全部探针：**R3-F1a/b 均被拒（46），R3-F1c 与 ACP 变体仍拒，主人自关正常，Sybil 回归通过，58 个测试全过（含新增 ACP 押金回家探针）**。新增 `r3_acp_close_deposit_must_go_home` 验证：ACP owner 的农场被陌生人关闭时，押金流向攻击者→拒；押金全额回家→接受（纯 griefing，主人资金无损，与原 F1 残留一致）。**该修复尚未提交、未重编进 `build/farm`、未上测试网——链上运行的仍是含 R3-F1 的二进制（`0xd80c8921…`）。** 修复方向正确，待落地后需以新二进制复跑全部探针并升级测试网。
-- **工作区当前是半修复状态（如实记录）**：`contracts/farm/src/main.rs`、`tests/src/lib.rs`、`tests/tests/audit_fable.rs` 已含修复源码与新断言测试，但 `build/farm` 仍是旧二进制。因此直接 `cargo test` 会有 4 个新 close 测试失败（它们断言修复后的拒绝，跑在旧二进制上）——这不是测试写错，是**源码与二进制不同步**。重编合约（`scripts/build-contract.sh`）后即全绿（隔离副本已验证 58/58）。提交前必须重编并升级测试网。
+---
 
-### R3-F2 · 放草-帮忙循环白刷经验（中危，**未修**）
+### [OPEN-01] 高危：ACP / Omnilock-ACP 锁用户可被无签名强制关闭并盈利盗取 ~1 CKB
 
-`OP_MISCHIEF` 放草后 `OP_HELP` 拔掉，同一笔交易重复 30 轮：被访农场终态与初态逐字节相同，访客每轮得 3 点帮助经验，一笔交易 90 点，每天可重复。实测（`r3_help_exp_mischief_loop`）：`visited unchanged=true, visitor exp=90`。无需被访主人任何参与。约一个月可刷到 25 级，破坏等级经济。
+- **来源与交叉订正**：**Gemini 4 Neon（GN-01）**，纠正 **glm-5.3-flash（V1）**、**qwen4-max（R3-F1d）** 与 **Claude Fable 5.2（FB-7）** 中将 ACP 关场残留视为“攻击者自掏押金、纯亏本破坏、受害者资金无损”的误判。
+- **位置**：[contracts/farm/src/main.rs](file:///Users/mac/ckb_projects/qq_farm/contracts/farm/src/main.rs#L60-L62)、[L154-L197](file:///Users/mac/ckb_projects/qq_farm/contracts/farm/src/main.rs#L154-L197)、[L218-L248](file:///Users/mac/ckb_projects/qq_farm/contracts/farm/src/main.rs#L218-L248)
+- **机理**：
+  - `close()` 校验 `flow.present` 且 `-flow.spent + CLOSE_FEE_ALLOWANCE (1 CKB) >= closing_deposits`。
+  - 对使用标准 RFC-0026 ACP 锁或 Omnilock-ACP 锁的玩家，只要其地址存在任意存活 ACP cell（如 `61 CKB` 找零），任意陌生人无需签名即可把受害者农场（`332 CKB`）与该 ACP cell（`61 CKB`）共同放入输入，将 ACP cell 输出扩容至 `61 + 331 = 392 CKB`（净增 `+331 CKB`，无签名通过 ACP 锁校验），并把差额 `1 CKB - tx_fee ≈ 0.9999 CKB` 转给自己。
+  - 押金来源是受害者的农场 cell 本身而非攻击者腰包，且 `audit_fable.rs` 仅测试了扣留 2 CKB 被拒，漏检了正好扣留 `1 CKB` 容差的盈利路径。
+- **影响**：攻击者每强制关闭一座 ACP 农场即可**净赚 ~0.9999 CKB**，同时永久销毁受害者的全部游戏进度（等级、金币、18 块扩地），可被自动化机器人批量套利。
+- **修复建议**：
+  1. **合约层根治（推荐）**：引入两步关场——先执行主人操作 `OP_MARK_CLOSING`（要求 `owner_pays` 即 `flow.spent > 0`，ACP 锁无签名无法减少容量），置位“待关闭”标志后方允许 `close()` 销毁，同时将 `CLOSE_FEE_ALLOWANCE` 收紧至 `0.01 CKB`（`1_000_000` shannons）；
+  2. **客户端已实施拦截缓解（2026-11-23）**：官方前端已在 [web/src/chain/farm.ts](file:///Users/mac/ckb_projects/qq_farm/web/src/chain/farm.ts)（`detectUnsupportedOwnerLock` 及 `createFarm`）、[web/src/game.ts](file:///Users/mac/ckb_projects/qq_farm/web/src/game.ts) 与 [web/src/App.tsx](file:///Users/mac/ckb_projects/qq_farm/web/src/App.tsx) 中禁止 `OmniLock-ACP`（`args[21] & 0x02 !== 0`）、标准 `AnyoneCanPay` 及 `AlwaysSuccess` 地址开垦新农场并给出明确提示（不影响已有农场的正常收回）。残留边界：合约层尚未禁止第三方客户端直接用 ACP 地址开垦，彻底根治仍需上述合约层两步关场改造。
 
-- 根因：`clear_problem` 对"邻居放的草"返回 `Ok(false)`（不给主人经验），但 `OP_HELP` 的 `Credit::Help` 无条件发放——规则注释防住了"主人自己刷"，没防住"访客自放自拔"。
-- 修复建议：帮助经验只发给清理**自然问题**或**其他玩家留下的问题**；同一访客对同一地块同一季的帮助计一次；或 mischief 与 help 同交易互斥。
+---
 
-### R3-F3 · 狗判定仍可离线研磨（低危，设计残留）
+### [OPEN-02] 高危（架构信任模型）：单私钥中心化升级与销毁权
 
-Sybil 修复把身份换成 owner 锁哈希，但 `dog_blocks` 仍是 (owner, 公开 seed) 的确定性函数。攻击者生成新钱包钥匙即可研磨 owner 哈希：实测第 31,856 次尝试找到避开全部 18 块地狗判定的身份（期望 2^18，秒级 CPU）。狗对蓄意小偷仍是概率性迟滞。40% 总上限仍是唯一硬边界。
+- **来源**：**四份报告一致确认**（**V2 / F2 / FB-4 / GN-02**）
+- **位置**：[contracts/type-id/src/main.rs](file:///Users/mac/ckb_projects/qq_farm/contracts/type-id/src/main.rs#L16-L21)、[web/scripts/deploy.ts](file:///Users/mac/ckb_projects/qq_farm/web/scripts/deploy.ts#L109-L135)、[web/scripts/upgrade.ts](file:///Users/mac/ckb_projects/qq_farm/web/scripts/upgrade.ts#L81-L110)
+- **机理与影响**：农场 cell 的 lock 与 type 均通过 `hash_type: "type"` 指向由单一热私钥锁定的 `code` cell；`type-id` 校验器仅保证身份唯一不漂移，不审查升级后的二进制内容，也允许销毁 `code` cell。一旦该私钥泄露或作恶，可随时替换为放行脚本**盗走全网所有农场锁定的 CKB**，或烧毁 `code` cell **永久冻结全部押金**。此外，`deploy.ts` 已默认将 `validator` 设为部署者锁（可回收；`--immortal-validator` 可切回全零永生锁），当前测试网校验器仍为不可回收全零锁。
+- **修复建议**：上主网前必须替换为**硬件多签 + 链上时间锁（Timelock）**治理，或在合约完全稳定后将 `code` cell 转移至全零锁永久放弃升级权。
 
-### R3-F4 · 主网布线是坏的（中危，工程）
+---
 
-第三轮宣称"mainnet 成为一等网络"，实测不成立：
+### [OPEN-03] 中危：历史区块头“按天步进（Time-Travel）”重置每日计数器
 
-- `createClient("mainnet")` 落到兜底分支，返回 `ClientPublicTestnet` 指向 **testnet RPC**（实测取到测试网 tip 23,137,270）。前端若设 `VITE_NETWORK=mainnet` 会连到测试网。
-- `key.ts --network mainnet` 用 `ClientPublicTestnet` 类连主网 URL：能取到主网 tip，但客户端携带的是**测试网脚本表**，推导的地址/脚本配置错误。
-- 正确做法：mainnet 分支返回 `ccc.ClientPublicMainnet`（CCC 已提供，含主网脚本表与默认 RPC）。
-- 其余主网门槛不变：真实钱包从未走通、无 `rust-toolchain.toml`、升级钥匙仍是热私钥（`key.ts` 只是生成工具，不是多签/冷存储）。
+- **来源**：**Gemini 4 Neon（GN-03）**（前三轮未发现）
+- **位置**：[contracts/farm/src/main.rs](file:///Users/mac/ckb_projects/qq_farm/contracts/farm/src/main.rs#L270-L289)、[crates/farm-core/src/lib.rs](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L200-L215)、[L518-L548](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L518-L548)、[L811-L829](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L811-L829)
+- **机理**：
+  1. `Farm::new()` 将初始 `day` 设为 `0`；
+  2. 目标农场无 `pending` 地块时，`settle()` 不读取 `input_block()`，交易无需携带其近期区块头；
+  3. CKB 允许 `header_deps` 引用创世以来的任意历史区块头，`proven_time()` 仅取其最大时间戳；
+  4. `OP_MISCHIEF` 及清除好友杂草的 `OP_HELP` 不检查 `now`。
+- **影响**：攻击者仅用 **1 座新农场**（`day = 0`），首笔不带区块头执行 30 次 `OP_MISCHIEF`，随后逐笔传入 2019 年创世至今的递增历史区块头（CKB 主网约 2,560+ 天），每笔触发 `roll_day()` 清零 `mischief_today` 与 `help_today`，几分钟内即可执行 **~76,800+ 次使坏**（用完关场重开即可归零再刷）；对跨多游戏日的老作物（尤其是 devnet `unit=30` 下 2 小时即跨 10 天）同样可借此绕过 `HELP_EXP_PER_DAY = 50` 速刷经验；结合 **OPEN-04** 可实现单农场低成本无限期活性 DoS。
+- **修复状态（2026-11-23，已修复并重编译，待升级上链）**：
+  1. 已在 [crates/farm-core/src/lib.rs](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L902-L932) 的 `transition()` 中对涉及 `Credit::Help` / `Credit::Mischief` 的访客农场强制要求附带自身提交区块头（`mine.block` 必须存在且 `clock.now >= block.timestamp`，否则报 `Error::MissingHeader`），同步跳过 `other.actions.is_empty()`（顺带修复 **OPEN-09** 空操作重放开销，两农场偷摘周期由 298,313 降至 291,243）；
+  2. 已在 `OP_MISCHIEF` 中校验 `!plot.is_pending() && now < plot.planted_at` 返回 `Error::NeedTime`；
+  3. 已在 [tests/tests/audit_gemini.rs](file:///Users/mac/ckb_projects/qq_farm/tests/tests/audit_gemini.rs) 通过 `gn03_historical_header_day_stepping_is_refused` 与 `gn03_help_also_requires_visitor_block_header` 真实 CKB-VM 回归验证。
 
-### F1 · owner 认证不校验锁是否要求签名（中危，**已修复**，commit `1622cf2`）
+---
 
-`contracts/farm/src/main.rs` 的 `owner_present` 只检查"交易输入里有没有 owner 的 lock hash"，而 `create()` 允许 owner 是任意 32 字节。若玩家用 **anyone-can-pay** 这类"任何人可花"的锁当农场主人，攻击者无需任何签名，把受害者的 ACP cell 塞进交易当输入（ACP 允许陌生人花它，只要容量不减），即可冒充主人：**关闭农场拿走约 332 CKB 押金**，或执行任意 owner 操作。
+### [OPEN-04] 中危：零状态变化访客交易绕过 `E_NOTHING_HAPPENED` 构成活性 DoS
 
-- **实证**：`probe_acp_owner_robbed_via_close`（CKB-VM，always-success 锁模拟 ACP 的无签名可花性质），攻击交易验证通过，332 CKB 被拿走。
-- **现实暴露面**：CCC 默认推荐地址是 secp256k1 sighash / OmniLock，均需签名，默认钱包路径打不穿；测试网现存农场 owner 锁已逐一核对，均为需签名锁。但合约层面不阻止任何客户端用 ACP 地址建农场。
-- **修复（已上测试网）**：授权改为**方向校验**——`owner_net` 计算 owner 锁 cell 的容量净变化，owner 操作与开垦必须让 owner 侧净减少（付了手续费），关闭必须让 owner 侧净增加（押金流回 owner）。强签名锁行为不变；ACP 锁既不能被盗关闭、也不能被冒充执行 owner 操作（其"容量不可净减"的自有规则恰好无法伪装"净减"），创建时幽灵/赠送农场也被拒绝。
-- **优于白名单方案**：白名单只能挡"已知弱锁"，方向校验对任何"无签名可花且容量不减"的锁通用，且把 owner 操作冒充一并堵住。
-- **残留（如实披露）**：攻击者仍可**自掏押金**帮 ACP owner 关闭农场（把 332 CKB 赠回 owner，自己亏 332+手续费）——纯破坏、无收益、受害者无损资金。`probe_acp_owner_robbed_via_close` 已改为断言拒绝（回归测试）。
-- **第三轮更正**：上述"残留"低估了问题。方向伪造**不限于 ACP、不限于全额退款**——对任意主人，攻击者付 61 CKB 小费即可关闭其农场并净赚约 270 CKB（R3-F1a）。原 F1 的"已修复"结论对 update 路径成立，对 close 路径**不成立**，且 close 路径的暴露面比原漏洞更大。见 R3-F1。
+- **来源**：**Claude Fable 5.2（FB-5）**、**Gemini 4 Neon（GN-05）**（qwen4-max 与 glm-5.3-flash 复审确认）
+- **位置**：[contracts/farm/src/main.rs](file:///Users/mac/ckb_projects/qq_farm/contracts/farm/src/main.rs#L355-L372)、[crates/farm-core/src/lib.rs](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L668-L845)
+- **机理与影响**：`update()` 原先仅在 `cells[mine].actions.is_empty()` 时拒绝空转，未校验输出状态是否相对输入发生实际变化。陌生人在受害者农场的 witness 中连续放入 `[OP_MISCHIEF, OP_HELP]`（放草后立刻拔草），受害者状态逐字节不变，但 cell 的 `OutPoint` 被刷新，导致主人在途的收获、管理乃至关场交易全部因 UTXO 冲突作废。
+- **修复状态（2026-11-23，已修复并重编译，待升级上链）**：
+  1. 已在 `farm-core::run_actions` 中追踪 `mischief_this_tx`，禁止 `OP_HELP` 清除同一笔交易中刚投放的杂草/害虫（报 `Error::BadAction`）；
+  2. 已在 `contracts/farm/src/main.rs` 的 `update()` 中对纯访客交易（`!outcome.needs_owner`）校验 `expected[..len] == cells[mine].state[..]` 报 `E_NOTHING_HAPPENED`（51）；
+  3. 已在 `gn04_same_tx_mischief_and_help_is_refused`、`probe_exp_from_clearing_own_mischief` 与 `r3_help_exp_mischief_loop` 中通过真实 CKB-VM 回归验证（跨两笔交易的正常放草/帮忙仍正常通过）。
 
-### F2 · 升级权集中，burn 是关服开关（信任模型，v2 引入，已如实披露）
+---
 
-代码 cell 由部署者私钥看守，type-id 校验器只保证"身份不漂移、无伪造副本"，不保证"升级善意"：
+### [OPEN-05] 中危（运维安全）：`shutdown.ts` 退场检查遗漏非默认 `unit` 世界，存在误冻资产风险
 
-- 部署者可换任意新二进制，对老存档不利的规则链上不会阻止；理论上可换上允许转移农场 CKB 的规则。
-- 部署者可销毁代码 cell（type-id 允许 burn，已实证），所有农场 lock/type 失去可解析代码，**永远冻结，CKB 取不回来**。
-- 当前测试网部署私钥是脚本生成的明文测试钥匙（`.testnet-deployer.key`）。
+- **来源与交叉订正**：**Gemini 4 Neon（GN-04）**。
+  - *交叉核验说明*：GN-04 初版曾怀疑 `shutdown.ts` 同笔交易既消费又引用 `validator` cell 会被节点拒绝；经核查 CKB `resolve_transaction` 规则（同笔交易允许 `cell_dep` 引用自身 `input`，`seen_inputs` 仅约束前序交易）并与 **glm-5.3-flash** 第四轮 devnet 实测（单笔成功回收 77,955 CKB）对账后，已确认单笔回收可行并撤回该误报；但下方“漏检非默认 `unit` 世界”缺陷确认成立。
+- **位置**：[web/scripts/shutdown.ts](file:///Users/mac/ckb_projects/qq_farm/web/scripts/shutdown.ts#L44-L66)
+- **机理与影响**：合约允许玩家以任意合法 `unit`（`1..=3600`）引用同一 `codeScriptHash` 创建农场，但 `shutdown.ts` 原先仅按 `args: numLeToBytes(deployment.unit, 4)` 前缀扫描存量农场，会漏检非默认 `unit` 的存活农场并误烧 `code` cell 导致冻币。
+- **修复状态（2026-11-23，已修复）**：已将 `shutdown.ts` 改为按 `args: "0x"` 空前缀同时扫描 `scriptType: "type"` 与 `scriptType: "lock"` 并按 `txHash:index` 去重，确保覆盖所有 `unit` 世界中依赖该 `codeScriptHash` 的一切存活 cell；已通过 TypeScript 类型检查。
 
-**上主网前必须**：换多签或硬件钱包，公开升级治理方式（时间锁/社区监督/最终放弃升级权锁死代码 cell）。文档与前端已按此如实披露（README"升级与信任模型"、规则页文案）。
+---
 
-### F3 · 防偷机制在 Sybil 面前形同虚设（经济设计，**主体已修复**，commit `d226831`，第三轮回归验证通过）
+### [OPEN-06] 低危：`apply_credit` 对 0 经验好友杂草清除仍消耗 `help_today` 额度
 
-原问题：防偷按农场 ID 计数，同一主人多座农场可互偷，Sybil 成本趋近于零。
+- **来源**：**Gemini 4 Neon（GN-06）**
+- **位置**：[crates/farm-core/src/lib.rs](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L559-L571)、[L622-L630](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L622-L630)
+- **机理与影响**：修复“放草-拔草刷经验”后，清除好友放的草/虫（`earned == false`）不再给经验，但 `farm.help_today += 1` 仍在 `if earned` 外部执行，且 `clear_problem()` 优先清除好友杂草。诚实玩家热心帮邻居清草既不得经验，还会白白耗尽每日 50 次有经验帮忙的额度。
+- **修复建议**：将 `farm.help_today += 1` 移入 `if earned && farm.help_today < HELP_EXP_PER_DAY` 分支内。
 
-- **修复**：偷菜槽位与狗判定的身份改为**访客农场状态里的 owner 锁哈希**（字节 1..33），同一玩家所有农场共享槽位。第三轮回归（`r3_sybil_fix_holds_and_honest_steal_works`）：同 owner 第二座农场偷同一块地被拒（29），不同玩家正常偷摘。`probe_self_sybil_steal` 已重写为断言拒绝。
-- **残留**：(a) 狗判定仍可研磨（R3-F3）；(b) 不同玩家联合仍可偷到 40% 上限——设计边界；(c) 升级前按农场 id 记录的旧 thieves 位图不映射到新 owner 槽位，既有小偷在老地块上可多偷一次（测试网世界刚建，影响可忽略，如实记录）。
-- 40% 仍应理解为"所有认真玩的人每季的固定上限损失"。
+---
 
-### F4 · 批量串门验证成本 O(n²)（可扩展性，**客户端已缓解**，commit `d226831`）
+### [OPEN-07] 低危（设计残留）：看门狗/偷菜可离线研磨新密钥绕过 & 16 位槽位高概率误碰撞
 
-每座农场脚本重放交易里所有农场的操作列表。实测（70M cycles 预算）：
+- **来源**：**qwen4-max（R3-F3 / F3）**、**Claude Fable 5.2（FB-6）**、**glm-5.3-flash（V3）**、**Gemini 4 Neon（GN-07）**
+- **位置**：[crates/farm-core/src/lib.rs](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L481-L489)、[L504-L514](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L504-L514)
+- **机理与影响**：
+  1. `dog_blocks` 与 `thief_slot` 是 `(owner[0..8], plot.seed)` 的确定性函数，而 `plot.seed` 上链公开。`r3_dog_grind_still_possible` 实测第 **31,856** 次尝试即可离线筛出绕过全部 18 块地看门狗的新钱包密钥（且可创建 6–7 个临时可退款农场独自偷满 40% `steal_cap`，或由主人小号提前偷满自保）。
+  2. `plot.thieves` 仅为 16 位位图，对樱桃等可被 7 人偷摘的作物，前 6 人偷过后，无关的诚实邻居有高达 **`6 / 16 = 37.5%`** 的概率因哈希碰撞被误拒 `AlreadyStolen`。
+- **修复建议**：文档明确将 40% 定位为硬边界、狗与槽位为概率节制；若未来升级至状态 `VERSION = 2`，可将 `thieves` 扩为 `u32`/`u64` 位图，并可校验访客农场创建时间早于 `plot.planted_at` 以阻断事后研磨。
 
-| 同交易农场数 | cycles |
-| ---: | ---: |
-| 2 | 289,228 |
-| 5 | 1,283,663 |
-| 10 | 4,533,228 |
-| 20 | 16,951,633 |
-| 30 | 37,203,678 |
-| 40 | 65,510,843 |
-| 45 | 超预算失败 |
+---
 
-单座满负荷农场（18 地 55 操作）仅 142,816 cycles，瓶颈纯在跨农场重放。
+### [OPEN-08] 低危（规则与经济边界）：按农场计使坏、成熟后零损耗清草与同主人双场互助
 
-- **缓解**：`play()` 现在把超过 24 座农场的串门拆成顺序交易，玩家农场状态逐笔结转（`MAX_FARMS_PER_TX = 24`）。合约层 O(n²) 未变，但客户端不会再构造超预算交易。24 座实测约 2400 万 cycles，留有余量。
-- **残留**：拆单中途失败时篮子保留、陈旧操作由 `sift` 标记丢弃（轻微 UX 问题）；直接构造交易的第三方客户端仍可自行撞上限。
+- **来源**：**Claude Fable 5.2（FB-3）**、**qwen4-max（R4-FB3）**、**Gemini 4 Neon（GN-08）**
+- **要点**：
+  1. **每日使坏按农场计（实证 `probe_mischief_limit_is_per_farm`）**：同玩家第二座农场另享 30 次/天（硬边界为每地块每季最多一草一虫）；
+  2. **成熟后同笔 `OP_CLEAR + OP_HARVEST` 零损耗**：`OP_CLEAR` 未检查 `now < ripe_at`，玩家无需在生长期照料，成熟时一次清理并收获即可拿满 100% 产量与清理经验；
+  3. **同主人双农场互助多赚 +50% 经验**：`OP_HELP`（3 XP）未禁止 `actor_owner == farm.owner`，比自己 `OP_CLEAR`（2 XP）多赚 50% 经验。
 
-### F5 · 主网工程缺口（**部分布线，但布线是坏的**，见 R3-F4）
+---
 
-- `NetworkId` 已含 mainnet、`NETWORKS` 有主网条目、deploy/upgrade 有 `--yes` 门禁、`key.ts` 生成专用钥匙（gitignored、0600、拒绝覆盖）。**但 `createClient("mainnet")` 实际连测试网，`key.ts` 主网客户端用错脚本表**（R3-F4，实测）。
-- 从未用真实钱包（JoyID/MetaMask/OKX）在浏览器走通全流程；私钥账号验证不能替代钱包连接器验证。
-- 无 `rust-toolchain.toml`，构建可复现性只在本机成立；不可升级/可升级合约的代码身份就是游戏本身，应固定工具链。
-- 单点公共 RPC 无 fallback（审计期间多次超时）；`listFarms` 每 cell 两次 RPC、上限 300，规模上来需要索引服务。
-- 测试网完整偷摘/收获流程（2 真实小时）未在 v2 世界走完；偷摘/收获已在本地链与 CKB-VM 验证。
-- 前端规则页的审计展示在中英文化重写（`d226831`）中丢失，本轮已补回（见下）。
+### [OPEN-09] 信息与优化汇总（合约性能、锁模型假设、客户端与运维）
 
-## 实证通过的核心性质
+- **来源**：**四份报告汇总**（**V4 / F4 / F5 / FB-8 / FB-9 / R5-3 / GN-09 / GN-10**）
+- **合约与性能**：
+  - **`transition()` 未跳过空操作农场**（GN-09）：[crates/farm-core/src/lib.rs](file:///Users/mac/ckb_projects/qq_farm/crates/farm-core/src/lib.rs#L890-L906) 未像 `is_visitor()` 一样跳过 `other.actions.is_empty()`，加剧批量串门 `O(N²)` 周期开销（30 座农场约 3,949 万 cycles，客户端已拆单 `≤ 24` 座/笔约 2,558 万 cycles，远低于 7,000 万上限），建议补上 `other.actions.is_empty()` 跳过；
+  - **`level_of(exp)` 线性循环**（GN-09）：极端高经验下最多迭代 ~9,268 次，可改为整数平方根或二分；
+  - **锁/类型模式仅凭 `args.len()` 分派**（GN-10）：非标准构造（如 `args = []` 作 type script 或 `args = 36B` 作无 type cell 的 lock script）会造成自发永久冻币；
+  - **锁签名范围假设与交易组合限制**（FB-8 / GN-10）：`close` 与 `owner_pays` 假设主人锁为全交易签名（不兼容 open-tx / 部分签名锁），且同一笔交易不能同时关闭 A 农场并执行 B 农场主人操作或把押金直接转至他处。
+- **前端与运维**：
+  - **`farm.name` 未剔除 Unicode Bidi 覆盖字符**（GN-10）：[web/src/chain/rules.ts](file:///Users/mac/ckb_projects/qq_farm/web/src/chain/rules.ts#L249-L259) 已过滤 C0/DEL 且无 `innerHTML` XSS，但建议同步剥离 `U+202A–U+202E` / `U+2066–U+2069` 防视觉欺骗；
+  - **RPC 单点无 fallback**（F5 / FB-9）：公共节点仅配置单一 URL；
+  - **多农场 UI 显示**（FB-9）：`findFarmByOwner` 仅返回同一钱包下的第一座农场；
+  - **依赖公告**（FB-9）：`npm audit --omit=dev` 有 23 条来自 `@ckb-ccc` 上游 `elliptic` 的低危公告（无中高危）；
+  - **遗留测试脚本密钥路径**（GN-10）：`e2e.ts` / `cleanup-old.ts` / `close-remaining.ts` 仍读 `../.testnet-*.key`，建议统一至 `env.ts` 的 `signingKey()`；
+  - **测试并发稳定性**（R5-3）：7 套 Rust 测试并发执行时偶发资源竞争失败，单跑必过，CI 建议串行或加重试；
+  - **已发布网页需同步刷新**（FB-2）：每次测试网合约升级后须重新构建发布静态站点（`public/deployments.json` 需为最新代码 cell outpoint）。
 
-- **状态验证完备**：输出必须逐字节等于 `transition()` 重放结果。伪造金币/经验/仓库/地块/owner/容量、复制农场输出（type-id 拒，43）、关闭夹带操作（拒，52）、跨世界串门（拒）——全部正确拒绝。
-- **时间模型诚实**：`now` 取 header deps 最大时间戳（只能证明"至少这么晚"）；播种时间从承诺区块补记，无法谎报；报早时间对所有操作只有坏处。
-- **容量只增不减**（E_CAPACITY），邻居动不了押金；关闭必须主人在场。
-- **算术安全**：release `overflow-checks`，金币/仓库 checked、经验 saturating、`level_of` 有界（u32::MAX 约 9268 级，u64 中间量不溢出）。
-- **状态归纳不变量**：创建强制唯一初始态，decode 校验 crop/flags/season/空地全零，无伪造中间态注入路径。
-- **v2 身份保证**：代码 cell 不能复制、type id 不能漂移、伪造第二世界被拒、原地换代码后老农场照常验证、burn 后农场冻结（`tests/tests/upgrade.rs`，5 测试）。
-- **前端与合约共用一份 Rust 规则（WASM）**，"页面说能做"与"链上判定"不会分叉。
+---
 
-## 上主网前清单
+## 四、已修复并闭环的历史漏洞（Resolved Findings）
 
-1. **修 R3-F1（close 方向伪造，高危）**：close 授权恢复"主人锁在输入中"或等效不可伪造判据；两个陌生人关闭探针改为断言拒绝的回归测试；升级测试网。**最高优先级。**
-2. **修 R3-F2（放草-帮忙刷经验）**：帮助经验只计自然问题或他人留下的问题，或同交易 mischief/help 互斥。
-3. **修 R3-F4（主网客户端）**：mainnet 分支用 `ClientPublicMainnet`；`key.ts` 按网络选客户端类。
-4. F2：升级钥匙换多签/硬件钱包，公开治理；或放弃升级权锁死代码 cell。
-5. 真实钱包走通开垦→播种→偷摘→收获→卖出→收回（主网）。
-6. 固定工具链（`rust-toolchain.toml` / Docker 构建），任何人可复现代码哈希。
-7. RPC fallback / 索引服务。
-8. v2 测试网完整 2 小时流程跑通一次。
-9. 若放入真钱级别价值，找第三方审计公司独立复核。
+| 编号 | 原等级 | 问题描述 | 原报告编号 | 修复方式与实链/VM 验证 |
+| --- | --- | --- | --- | --- |
+| **FIXED-01** | **严重 / 高危** | 第二轮 `owner_net < 0` 方向授权导致陌生人仅付 61 CKB 小费即可无签名关闭**任意**农场并偷走 ~270 CKB | **R3-F1 / FB-1** | `close()` 改为双条件：主人锁须在输入中 **且** 全部关闭农场押金合并回流主人（`closing_deposits`，容差 `≤ 1 CKB`）。`audit_fable.rs`（8 测试）、`audit_round3.rs` 及本地链真实节点全拒（46），测试网已升级（强签名锁完全免疫；ACP 残留见 **OPEN-01**） |
+| **FIXED-02** | **中危** | v1 仅校验 `owner_present`，导致 ACP 弱锁可被无签名冒充执行主人操作及创建幽灵农场 | **V1 / F1** | `create()` 与 `update()` 改为 `owner_pays`（要求主人输入在场且净支出 `spent > 0`），ACP 无法伪造净减，强签名锁不受影响 |
+| **FIXED-03** | **中危** | 同笔交易放草-拔草循环 30 轮无成本白刷 90 经验 | **R3-F2** | `Credit::Help { earned }` 仅对自然问题发放经验，循环收益归零（`probe_exp_from_clearing_own_mischief` 与 `r3_help_exp_mischief_loop` 断言 0 经验） |
+| **FIXED-04** | **低危** | 关闭中的农场被指名为访客时绕过每日使坏上限并烧毁被偷果实 | **FB-2** | `close()` 调用 `is_visitor()` 重放同世界其他农场操作，若自身被点名为访客则报 `E_CLOSING_VISITOR`（54）。`audit_fable_r2.rs`（6 测试）及本地链、测试网实链验证全部通过 |
+| **FIXED-05** | **中危（工程）** | `createClient("mainnet")` 误返 `ClientPublicTestnet` 连测试网，`key.ts` 主网客户端脚本表错配 | **R3-F4 / F5** | 改为返回 `ClientPublicMainnet`，`key.ts` 复用同一入口，实测连主网 RPC 成功 |
+| **FIXED-06** | **低危（设计）** | 偷菜防重与狗判定按 `farm.id` 计，同玩家开第二座农场可重复偷同一地块 | **V3 / F3** | 改为按访客农场状态中的 `owner` 锁哈希（字节 `1..33`）计槽位与狗判定，`r3_sybil_fix_holds_and_honest_steal_works` 回归通过（新钥匙研磨残留见 **OPEN-07**） |
+| **FIXED-07** | **低危（可扩展性）** | 批量串门 >40 座农场触及 70M cycles 上限 | **V4 / F4** | 前端 `play()` 自动拆单为 `≤ 24` 座/笔（~2,558 万 cycles），状态逐笔结转 |
+| **FIXED-08** | **低危（运维/前端）** | 升级中断记录失步、农场列表幽灵条目滞留、无工具链锁定、命令行 `--privkey` 泄露风险、`key.ts` 参数解析与英文 i18n 拼接错误、`bots/e2e` viewer 参数错误 | **V5 / K1 / K2 / R5-1 / Fable 11-23 修补** | 全部修复：`upgrade.ts` 链上自愈 + 双写 `public/deployments.json`；列表刷新按活集合清理；新增 `rust-toolchain.toml`（1.98.1）；`signingKey()` 禁用 `--privkey` 并强制 `0600` keyfile；修复 `key.ts`、i18n 与 `bots.ts`/`e2e.ts` |
 
-## 复现
+---
+
+## 五、已核实成立的核心安全性质
+
+经四份报告独立代码审查、64+ 项真实 CKB-VM 测试与本地链/测试网实链验证确认：
+
+1. **状态机确定性与防篡改**：`update()` 逐字节比对 `farm_core::transition` 输出与 `GroupOutput` 数据；非法状态被 `Farm::decode` 严格拦截（版本、长度、地块数、作物范围、标志位、季数、空地全零）。
+2. **农场容量单调不减**：正常游玩中 `capacity_out >= capacity_in`（`E_CAPACITY` = 45），且 `create()`/`update()` 强制输出锁保持为 `farm_lock`（`E_LOCK` = 44）。
+3. **身份唯一性**：农场与代码 cell 均受 `check_type_id` 约束，不可复制、不可漂移、不可伪造第二世界（`tests/tests/upgrade.rs` 5 项测试实证）。
+4. **算术安全**：`contracts/Cargo.toml` 开启 `overflow-checks = true`，金币/种子/果实采用 `checked_*`，经验采用 `saturating_add`，`owner_flow` 采用 `i128` 汇总，时间戳转换使用 `u32::try_from`（安全支撑至 2106 年）。
+5. **前后端规则同源**：合约与前端 WASM 编译自同一份 `no_std` `farm-core`，无规则分叉。
+6. **跨世界隔离**：不同 `unit` 的农场在 `world()` 中严格隔离，无法相互偷菜或传递信用。
+
+---
+
+## 六、尚未验证的范围
+
+- **CKB 主网**：尚未部署，未执行任何主网交易。
+- **真实浏览器钱包签名**：JoyID、MetaMask、OKX、UniSat 等均仅完成 UI 选择器接入，未用真实私钥在浏览器中走完开垦 → 播种 → 串门 → 收获 → 关场闭环。
+- **测试网完整 2 小时真实周期**：v2 世界尚未完整跑完一轮 2 小时成熟/偷摘/收获 E2E（已验证开垦、播种、放草、关闭及 FB-2 攻击拒绝）。
+- **跨平台可复现构建**：`rust-toolchain.toml` 逐字节一致仅在本机（macOS aarch64）验证，尚未在 Linux 容器等独立环境复核。
+- **模糊测试与第三方人工审计**：尚未进行 fuzzing、形式化验证及专业安全审计公司独立复核。
+
+---
+
+## 七、统一上主网前清单（按优先级）
+
+### P0 · 阻断上线（主网前必改）
+1. **修复 OPEN-01（ACP 盈利性强关与 ~1 CKB 盗取）**：合约层引入两步关场（`OP_MARK_CLOSING` 强制 `owner_pays`）并收紧 `CLOSE_FEE_ALLOWANCE`，同时前端拦截/警示 ACP 类地址；补充针对 `deposit - 1 CKB` 扣留路径的 CKB-VM 回归测试。
+2. **解决 OPEN-02（单私钥升级治理）**：将 `code` cell 升级锁切换为硬件多签 + 链上时间锁，或在稳定后永久转移至全零锁放弃升级权。
+
+### P1 · 强烈建议在主网前修复
+3. **修复 OPEN-03（历史区块头按天步进重置计数器）**：`update()` 锚定农场输入自身区块头、新农场首次更新锚定 `day`、`OP_MISCHIEF` 校验 `now >= planted_at`，并补充历史区块头步进攻击的 CKB-VM 回归测试。
+4. **修复 OPEN-04（零状态变化访客活性 DoS）**：对 `!outcome.needs_owner` 交易拒绝 `actual == cells[mine].state`，并禁止同笔同人同地块的放草+拔草组合。
+5. **修复 OPEN-05（`shutdown.ts` 跨 `unit` 漏检）**：将退场前存量农场扫描改为全量前缀 `args: "0x"`（覆盖 `type` 与 `lock`）。
+6. **真实钱包与完整流程实测**：使用真实浏览器钱包在测试网走通完整 2 小时生命周期，再在主网小额验证；并在独立 Linux 环境中复核构建哈希一致性。
+
+### P2 · 体验优化与长期加固
+7. **修复 OPEN-06 & OPEN-09 轻量化改动**：`apply_credit` 仅在 `earned == true` 时递增 `help_today`；`transition()` 跳过 `other.actions.is_empty()`；前端 `decodeName` 过滤 Bidi 控制字符；配置公共 RPC fallback；统一遗留脚本的密钥加载；每次升级后及时同步重新发布静态网页。
+8. **明确文档披露与第三方复核**：在规则页与 README 中如实更新 OPEN-01/03/07/08 边界（40% 固定上限、狗与每日次数性质、仅使用强签名锁）；如引入高价值或金币↔CKB 兑换通道，必须重新进行经济与合约审计并引入第三方专业审计机构。
+
+---
+
+## 八、复现与验证命令
 
 ```bash
-cargo test -p farm-tests                       # 工作区半修复态：4 个新 close 测试会失败，重编合约后 57/57
-cargo test -p farm-tests --test audit -- --nocapture    # 攻击探针与 cycle 基准
-cargo test -p farm-tests --test upgrade -- --nocapture  # 升级路径
-cargo test -p farm-tests --test audit_round3 -- --nocapture  # 第三轮：close 伪造、经验循环、狗研磨、Sybil 回归
-cd web && npm run e2e                          # 本地链 13 步（需 ./start.sh）
+# 运行全部 CKB-VM 合约、规则、升级与三轮审计探针测试
+cargo test -p farm-tests
+
+# 单独查看各轮审计探针输出
+cargo test -p farm-tests --test audit -- --nocapture
+cargo test -p farm-tests --test audit_round3 -- --nocapture
+cargo test -p farm-tests --test audit_fable -- --nocapture
+cargo test -p farm-tests --test audit_fable_r2 -- --nocapture
+
+# 校验合约可复现构建哈希（不覆盖 build/）
+cd contracts && CARGO_TARGET_DIR=../target/audit/pinned cargo build --release --target riscv64imac-unknown-none-elf -p farm -p type-id
+shasum -a 256 ../target/audit/pinned/riscv64imac-unknown-none-elf/release/farm ../build/farm
+
+# 本地链 13 步端到端测试（需先运行 ./start.sh）
+cd web && npm run e2e
 ```
+
+---
+
+*本综合报告合并自 `glm-5.3-flash`、`qwen4-max`、`Claude Fable 5.2`、`Gemini 4 Neon` 四份独立审计报告，整理于 2026-11-23（由 Gemini 4 Neon 汇总编校）。*

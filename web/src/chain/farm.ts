@@ -85,6 +85,58 @@ const bytes = (h: string) => ccc.bytesFrom(h);
 const outPointKey = (o: { txHash: string; index: number | bigint }) => `${o.txHash}:${Number(o.index)}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+export type UnsupportedOwnerLock = "acp" | "omnilock-acp" | "always-success";
+
+// Known code hashes for signatureless / ACP-capable locks across mainnet,
+// testnet, and devnet, supplemented dynamically by `client.getKnownScript`.
+const ACP_CODE_HASHES = new Set([
+  "0xd369597ff47f29fbc0d47d2e3775370d1250b85140c670e4718af712983a2354", // mainnet RFC-0026 ACP
+  "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356", // testnet RFC-0026 ACP
+  "0xe09352af0066f3162287763ce4ddba9af6bfaeab198dc7ab37f8c71c9e68bb5b", // devnet ACP
+]);
+
+const OMNILOCK_CODE_HASHES = new Set([
+  "0x9b819793a64463aed77c615d6cb226eea5487ccfc0783043a587254cda2b6f26", // mainnet OmniLock v2
+  "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb", // testnet OmniLock v2
+  "0x79f90bb5e892d80dd213439eeab551120eb417678824f282b4ffb5f21bad2e1e", // mainnet OmniLock v1
+  "0x9c6933d977360f115a3e9cd5a2e0e475853681b80d775d93ad0f8969da343e56", // devnet OmniLock
+]);
+
+/** OmniLock `omnilock_flags` (args byte 21): bit 1 (0x02) enables ACP mode. */
+const OMNILOCK_FLAG_ACP = 0x02;
+
+/**
+ * Checks whether a wallet lock script allows signatureless spends (RFC-0026 ACP,
+ * OmniLock with ACP flag enabled, or AlwaysSuccess). Such locks are vulnerable
+ * to unauthorized farm closure (audit GN-01) and must not be used to claim a
+ * farm.
+ */
+export async function detectUnsupportedOwnerLock(
+  client: ccc.Client,
+  lock: ccc.Script,
+): Promise<UnsupportedOwnerLock | undefined> {
+  const codeHash = ccc.hexFrom(lock.codeHash).toLowerCase();
+  const matchesKnown = async (known: ccc.KnownScript): Promise<boolean> => {
+    const info = await client.getKnownScript(known).catch(() => undefined);
+    return !!info && ccc.hexFrom(info.codeHash).toLowerCase() === codeHash;
+  };
+
+  if (ACP_CODE_HASHES.has(codeHash) || (await matchesKnown(ccc.KnownScript.AnyoneCanPay))) {
+    return "acp";
+  }
+  if (await matchesKnown(ccc.KnownScript.AlwaysSuccess)) {
+    return "always-success";
+  }
+  if (OMNILOCK_CODE_HASHES.has(codeHash) || (await matchesKnown(ccc.KnownScript.OmniLock))) {
+    const args = ccc.bytesFrom(lock.args);
+    // OmniLock args: 21-byte auth identity + 1-byte omnilock_flags (+ optional data).
+    if (args.length >= 22 && (args[21] & OMNILOCK_FLAG_ACP) !== 0) {
+      return "omnilock-acp";
+    }
+  }
+  return undefined;
+}
+
 export class FarmChain {
   private blocks = new Map<string, FarmCell["block"]>();
   /** Farm cells our own committed transactions spent, in case the indexer still lists them. */
@@ -298,10 +350,20 @@ export class FarmChain {
     throw new ChainError(t("slowTx"));
   }
 
+  /** Returns a reason if `lock` is an unsupported ACP/signatureless lock. */
+  async unsupportedOwnerLock(lock: ccc.Script): Promise<UnsupportedOwnerLock | undefined> {
+    return detectUnsupportedOwnerLock(this.client, lock);
+  }
+
   /** Creates a farm for the signer. */
   async createFarm(signer: ccc.Signer, name: string): Promise<{ txHash: string; farm: FarmCell }> {
     try {
-      const state = newFarm(await this.ownerOf(signer), name);
+      const { script: ownerLock } = await signer.getRecommendedAddressObj();
+      const unsupported = await this.unsupportedOwnerLock(ownerLock);
+      if (unsupported) {
+        throw new ChainError(t(unsupported === "omnilock-acp" ? "unsupportedOmnilockAcp" : "unsupportedAcpLock"));
+      }
+      const state = newFarm(bytes(ownerLock.hash()), name);
       const tx = ccc.Transaction.from({ cellDeps: [this.codeDep()] });
       tx.addOutput(this.farmOutput(new Uint8Array(32), state), hex(state));
       await tx.completeInputsByCapacity(signer);

@@ -362,6 +362,11 @@ fn update(me: &Script, args: &[u8], unit: u32) -> Result<(), i8> {
 
     let mut expected = [0u8; MAX_STATE_LEN];
     let len = outcome.farm.encode(&mut expected);
+    // A visitor-only spend must actually change this farm's state, preventing
+    // no-op cell churn that only invalidates the owner's in-flight tx.
+    if !outcome.needs_owner && expected[..len] == cells[mine].state[..] {
+        return Err(E_NOTHING_HAPPENED);
+    }
     let actual = load_cell_data(0, Source::GroupOutput).map_err(sys)?;
     if actual[..] != expected[..len] {
         return Err(E_WRONG_STATE);

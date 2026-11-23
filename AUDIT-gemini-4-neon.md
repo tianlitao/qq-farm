@@ -24,11 +24,11 @@
 
 | 编号 | 标题 | 严重等级 | 涉及模块 | 状态 |
 | --- | --- | --- | --- | --- |
-| **GN-01** | ACP / Omnilock-ACP 锁用户可被无签名强制关场并**盈利性盗取 ~1 CKB**（纠正“纯亏本破坏”误判） | **高危 (High)** | `contracts/farm/src/main.rs` | 未修复 |
+| **GN-01** | ACP / Omnilock-ACP 锁用户可被无签名强制关场并**盈利性盗取 ~1 CKB**（纠正“纯亏本破坏”误判） | **高危 (High)** | `contracts/farm/src/main.rs`、`web/src/chain/farm.ts` | **前端已拦截缓解**（合约层待改） |
 | **GN-02** | 单私钥中心化升级与销毁权可盗取全部农场押金或永久冻结资产 | **高危 (High / 架构信任)** | `contracts/type-id`、`web/scripts/{deploy,upgrade}.ts` | 已知/未治理 |
-| **GN-03** | 历史区块头“按天步进（Time-Travel）”重置每日计数器：单农场可绕过 `MISCHIEF_PER_DAY` 与部分 `HELP_EXP_PER_DAY` 限制数千倍 | **中危 (Medium)** | `contracts/farm/src/main.rs`、`crates/farm-core/src/lib.rs` | 未修复 |
-| **GN-04** | `shutdown.ts` 存在两处关键缺陷：默认模式同笔交易既消费又引用 `validator` 必败；且退场检查遗漏非默认 `unit` 世界，存在误冻玩家资产风险 | **中危 (Medium)** | `web/scripts/shutdown.ts` | 未修复 |
-| **GN-05** | 同笔交易“放草 + 拔草”零状态变化仍可反复消费受害者 cell，结合 GN-03 可构成低成本持续活性 DoS | **中危 (Medium)** | `contracts/farm/src/main.rs` | 未修复 |
+| **GN-03** | 历史区块头“按天步进（Time-Travel）”重置每日计数器：单农场可绕过 `MISCHIEF_PER_DAY` 与部分 `HELP_EXP_PER_DAY` 限制数千倍 | **中危 (Medium)** | `contracts/farm/src/main.rs`、`crates/farm-core/src/lib.rs` | **已修复上线（devnet & testnet）** |
+| **GN-04** | `shutdown.ts` 退场检查仅扫描单一默认 `unit` 世界，遗漏非默认 `unit` 农场，存在误烧 `code` cell 致玩家永久冻币风险 | **中危 (Medium)** | `web/scripts/shutdown.ts` | **已修复** |
+| **GN-05** | 同笔交易“放草 + 拔草”零状态变化仍可反复消费受害者 cell，结合 GN-03 可构成低成本持续活性 DoS | **中危 (Medium)** | `contracts/farm/src/main.rs`、`crates/farm-core/src/lib.rs` | **已修复上线（devnet & testnet）** |
 | **GN-06** | `apply_credit` 对 0 经验的好友杂草清除仍扣除每日 `help_today` 额度，损害诚实帮忙玩家 | **低危 (Low)** | `crates/farm-core/src/lib.rs` | 未修复 |
 | **GN-07** | 偷菜与看门狗判定可离线研磨密钥绕过，且 16 位 `thief_slot` 位图存在高达 37.5% 的正常玩家哈希碰撞误拒 | **低危 (Low)** | `crates/farm-core/src/lib.rs` | 部分已缓解 |
 | **GN-08** | 游戏经济与机制边界：成熟后同笔 `OP_CLEAR + OP_HARVEST` 零损耗收菜、同主人双农场互助多获 50% 经验、每农场独立使坏上限 | **低危 / 信息 (Low/Info)** | `crates/farm-core/src/lib.rs` | 已知/未修复 |
@@ -111,7 +111,7 @@ Outputs:
    - 新增由主人触发的操作码（如 `OP_MARK_CLOSING`，需满足 `owner_pays`，即 `flow.spent > 0`——即便对 ACP 锁，减少容量也**必须**持有主人私钥签名），在农场状态中置位“待关闭”标志；
    - `close()` 要求农场已处于“待关闭”状态（且仍保留押金全额回流 `owner` 的检查，同时将 `CLOSE_FEE_ALLOWANCE` 从 `1 CKB` 收紧至 `0.01 CKB` 即 `1_000_000` shannons）。
    - 这样既保持无需引入额外签名算法的简洁架构，又让 ACP / Omnilock-ACP 锁用户彻底免疫无签名关场与 1 CKB 抽水。
-2. **短期缓解**：在文档、前端钱包连接逻辑与合约说明中明确警示“严禁使用 ACP / Omnilock-ACP 锁地址开垦农场”，并在前端检测已知 ACP `code_hash` 予以拦截提示。
+2. **前端已落地缓解（2026-11-23）**：已在 [web/src/chain/farm.ts](file:///Users/mac/ckb_projects/qq_farm/web/src/chain/farm.ts)（`detectUnsupportedOwnerLock` + `createFarm` 强校验）、[web/src/game.ts](file:///Users/mac/ckb_projects/qq_farm/web/src/game.ts) 与 [web/src/App.tsx](file:///Users/mac/ckb_projects/qq_farm/web/src/App.tsx) 中禁止 `AnyoneCanPay`、`OmniLock-ACP`（`args[21] & 0x02 !== 0`）及 `AlwaysSuccess` 地址开垦农场并展示中英文警示；同时保留已存在 ACP 农场的关闭回收能力。注意：该限制位于客户端层，第三方自行构造交易仍可绕过，彻底封堵仍需采用上述合约层两步关场方案。
 
 ---
 
@@ -190,46 +190,31 @@ fn roll_day(farm: &mut Farm, now: u32, unit: u32) {
 
 ---
 
-### [GN-04] 中危：`shutdown.ts` 存在两处关键缺陷（默认配置必败 + 跨 `unit` 世界漏检致玩家冻币）
+### [GN-04] 中危：`shutdown.ts` 退场检查遗漏非默认 `unit` 世界，存在误冻玩家资产风险
 
 - **位置**：
-  - [web/scripts/shutdown.ts](file:///Users/mac/ckb_projects/qq_farm/web/scripts/shutdown.ts#L44-L95)
-  - [web/scripts/deploy.ts](file:///Users/mac/ckb_projects/qq_farm/web/scripts/deploy.ts#L79-L86)
+  - [web/scripts/shutdown.ts](file:///Users/mac/ckb_projects/qq_farm/web/scripts/shutdown.ts#L44-L65)
 
 #### 漏洞原理
 
-1. **缺陷 A：同笔交易同时将 `validator` 放入 `cellDeps` 与 `inputs`，违背 CKB 共识规则**
-   - `deploy.ts` 第 80–81 行默认将 `validator` 锁设为 `deployerLockScript`（可回收模式），因此 `shutdown.ts` 中 `validatorSpendable` 默认为 `true`。
-   - `shutdown.ts` 第 69–88 行构造**单笔交易**：
-     ```ts
-     const tx = ccc.Transaction.from({
-       cellDeps: [{ outPoint: deployment.validator, depType: "code" }],
-     });
-     const cells = [{ ref: deployment.code, cell: codeCell }];
-     if (validatorSpendable) cells.push({ ref: deployment.validator, cell: validatorCell });
-     ```
-   - 在 CKB 共识 `resolve_transaction` 校验中，同一个 `OutPoint` **不能在同一笔交易中既作为 `input` 被消费、又作为 `cell_dep` 被引用**（节点会以 `OutPointError::Dead` 直接拒收）。因此默认部署下的关服回收脚本将无法上链成功。
+- `shutdown.ts` 第 46–59 行在销毁 `code` cell 前检查是否还有存活农场：
+  ```ts
+  const argsHex = ccc.hexFrom(ccc.numLeToBytes(deployment.unit, 4));
+  for await (const cell of client.findCellsOnChain({
+    script: { codeHash: deployment.codeScriptHash, hashType: "type", args: argsHex },
+    scriptType: "type",
+    scriptSearchMode: "prefix",
+    ...
+  }))
+  ```
+- 然而链上合约 `contracts/farm/src/main.rs` 允许**任何玩家**使用同一个 `codeScriptHash`、以任意合法 `unit`（`1..=3600`）创建农场（不同 `unit` 只是彼此不可见的平行世界，但共享同一份 `code` cell）。
+- 如果有第三方客户端或玩家在非默认 `unit`（例如 `unit = 60`）下创建了农场，`shutdown.ts` 的前缀扫描将**完全漏检**并判定“无存活农场”，随后烧毁 `code` cell，导致这些玩家的农场 CKB **永久锁死无法取回**。
 
-2. **缺陷 B：未关闭农场安全门仅扫描单一 `unit`，存在永久冻结玩家资产风险**
-   - `shutdown.ts` 第 46–59 行在销毁 `code` cell 前检查是否还有存活农场：
-     ```ts
-     const argsHex = ccc.hexFrom(ccc.numLeToBytes(deployment.unit, 4));
-     for await (const cell of client.findCellsOnChain({
-       script: { codeHash: deployment.codeScriptHash, hashType: "type", args: argsHex },
-       scriptType: "type",
-       scriptSearchMode: "prefix",
-       ...
-     }))
-     ```
-   - 然而链上合约 `contracts/farm/src/main.rs` 允许**任何玩家**使用同一个 `codeScriptHash`、以任意合法 `unit`（`1..=3600`）创建农场（不同 `unit` 只是彼此不可见的平行世界，但共享同一份 `code` cell）。
-   - 如果有第三方客户端或玩家在非默认 `unit`（例如 `unit = 60`）下创建了农场，`shutdown.ts` 的前缀扫描将**完全漏检**并判定“无存活农场”，随后烧毁 `code` cell，导致这些玩家的农场 CKB **永久锁死无法取回**。
+> **交叉核验订正**：初版曾怀疑 `shutdown.ts` 在同笔交易中同时将 `validator` 放入 `cellDeps` 和 `inputs` 会被 CKB 节点拒收。经核查 CKB `resolve_transaction` 语义（同笔交易内 `cell_deps` 仅检查前序交易已消费集合 `seen_inputs`，允许引用本交易自身的 `input`）并与 `glm-5.3-flash` 的 devnet 实测（单笔成功回收 77,955 CKB）交叉印证，单笔回收本身可行，已撤回该误报；但跨 `unit` 世界漏检缺陷真实存在。
 
 #### 修复建议
 
-1. **拆分为两笔顺序交易**：
-   - 交易 1：引用 `validator` 作为 `cellDep`，仅消费（销毁）`code` cell 并等待上链确认；
-   - 交易 2：不再引用 `validator` 作为 `cellDep`，单独消费 `validator` cell 回收容量。
-2. **全量前缀扫描**：将 `shutdown.ts` 第 50 行的扫描参数改为 `args: "0x"`（空前缀），同时还应按 `scriptType: "lock"` 检查 `{ codeHash: deployment.codeScriptHash, hashType: "type", args: "0x" }`，确保覆盖所有 `unit` 世界中依赖该 `code` cell 的一切存活 cell。
+- **全量前缀扫描**：将 `shutdown.ts` 第 50 行的扫描参数改为 `args: "0x"`（空前缀），同时按 `scriptType: "lock"` 检查 `{ codeHash: deployment.codeScriptHash, hashType: "type", args: "0x" }`，确保覆盖所有 `unit` 世界中依赖该 `code` cell 的一切存活 cell 后再允许执行关服销毁。
 
 ---
 
@@ -392,7 +377,7 @@ pub fn dog_blocks(plot: &Plot, thief: &[u8; 32]) -> bool {
 | **P0（上线主网前必改）** | **GN-01** | 引入两步关场（`OP_MARK_CLOSING` 需 `owner_pays`）并收紧 `CLOSE_FEE_ALLOWANCE`，彻底修复 ACP / Omnilock-ACP 盈利性强制关场与 1 CKB 盗取漏洞 |
 | **P0（上线主网前必改）** | **GN-02** | 消除单把热私钥升级权：主网部署前切换为硬件多签 + 时间锁治理，或在稳定后永久放弃升级权 |
 | **P1（强烈建议修复）** | **GN-03 & GN-05** | `update()` 强制附带自身提交区块头锚定 `proven_time()`、新农场首次更新锚定 `day`、`OP_MISCHIEF` 校验 `now >= planted_at`；同时对纯访客交易禁止输出状态与输入完全相同（`actual == input`） |
-| **P1（强烈建议修复）** | **GN-04** | 将 `shutdown.ts` 拆分为两笔交易（先烧 `code`，再收 `validator`），并将存量农场检查改为全量前缀 `args: "0x"`（覆盖所有 `unit` 世界） |
+| **P1（强烈建议修复）** | **GN-04** | 将 `shutdown.ts` 的存量农场检查改为全量前缀 `args: "0x"`（含 `type` 与 `lock` 查询，覆盖所有 `unit` 世界） |
 | **P2（体验与优化）** | **GN-06, GN-07, GN-09, GN-10** | 修复 `apply_credit` 中 `help_today` 仅在 `earned == true` 时递增；`transition()` 跳过空操作农场；前端 `decodeName` 过滤 Bidi 字符；后续版本视情况扩展 `thieves` 位图与防研磨规则 |
 
 ---
