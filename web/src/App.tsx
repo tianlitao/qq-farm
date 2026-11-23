@@ -885,7 +885,7 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
         <p>{t("rulesClose")}</p>
         <p>
           {t("rulesAudit")}{" "}
-          <a href="https://github.com/tianlitao/qq-farm/blob/main/AUDIT-fable-5.2.md" target="_blank" rel="noreferrer">
+          <a href="https://github.com/tianlitao/qq-farm/blob/main/AUDIT.md" target="_blank" rel="noreferrer">
             {t("rulesAuditLink")}
           </a>
         </p>
