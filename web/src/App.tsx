@@ -799,10 +799,20 @@ function Barn({ catalog, farm, sell }: { catalog: Catalog; farm: FarmView; sell:
 
 function Neighbours({ game, go }: { game: Game; go: (id: string) => void }) {
   const [limit, setLimit] = useState(100);
+  const [hasMore, setHasMore] = useState(false);
+  const { refreshNeighbours } = game;
   // The neighbours are a global scan: refresh on demand, not every tick.
   useEffect(() => {
-    game.refreshNeighbours(limit).catch(() => {});
-  }, [game, limit]);
+    let cancelled = false;
+    refreshNeighbours(limit)
+      .then((more) => {
+        if (!cancelled) setHasMore(more);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshNeighbours, limit]);
   const rows = useMemo(() => {
     return game.farms
       .filter((f) => f.id !== game.mine?.id)
@@ -845,7 +855,7 @@ function Neighbours({ game, go }: { game: Game; go: (id: string) => void }) {
         </ul>
       )}
       <p className="drawer-note">{t("loadedCount", { n: rows.length })}</p>
-      {rows.length > 0 && (
+      {hasMore && (
         <button className="btn big" onClick={() => setLimit((n) => n + 100)}>
           {t("loadMore")}
         </button>

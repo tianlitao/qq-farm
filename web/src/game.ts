@@ -109,16 +109,19 @@ export function useGame() {
   }, []);
 
   // Full neighbour scan. Runs on demand (drawer open, load more) and once at
-  // boot as the fallback for farm discovery.
+  // boot as the fallback for farm discovery. Returns whether more farms exist
+  // beyond `limit`.
   const refreshNeighbours = useCallback(
-    async (limit: number) => {
-      if (!chain || !signer) return;
-      const [list, now, bal] = await Promise.all([chain.listFarms(limit), chain.clock(), chain.balance(signer)]);
-      upsert(list);
+    async (limit: number): Promise<boolean> => {
+      if (!chain || !signer) return false;
+      const [list, now, bal] = await Promise.all([chain.listFarms(limit + 1), chain.clock(), chain.balance(signer)]);
+      const hasMore = list.length > limit;
+      upsert(hasMore ? list.slice(0, limit) : list);
       setClock(now);
       setClockAt(Date.now());
       setBalance(bal);
       setLoaded(true);
+      return hasMore;
     },
     [chain, signer, upsert],
   );
