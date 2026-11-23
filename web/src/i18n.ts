@@ -213,7 +213,7 @@ const zh: Record<string, string> = {
     "农场格子里押着的 CKB 始终是你的。收回农场会销毁这座农场连同里面的金币、作物和等级，把 CKB 退回钱包，无法撤销。",
   closeBtn: "收回农场，取回 CKB",
   rulesAudit:
-    "已汇总四份模型审计（Gemini 4 Neon、qwen4-max 四轮、Claude Fable 5.2、glm-5.3-flash，最新 2026-11-23）：源码审查 + CKB-VM 攻击探针 + 实链验证，69 个测试全过。审计发现的高危问题（小费关闭他人农场）及全部中危问题均已修复并上线，前端已禁止 OmniLock-ACP / ACP 地址开垦。仍有未解决的事项（部署钥匙是单把管理员钥匙等），尚不具备上主网条件。模型审计，不等同第三方审计公司。",
+    "已汇总四份模型审计（Gemini 4 Neon、qwen4-max 四轮、Claude Fable 5.2、glm-5.3-flash，最新 2026-11-23）：源码审查 + CKB-VM 攻击探针 + 实链验证，69 个测试全过。审计发现的高危问题（小费关闭他人农场）及全部中危问题均已修复并上线，前端已禁止 OmniLock-ACP / ACP 地址开垦。模型审计，不等同第三方审计公司。",
   rulesAuditLink: "查看审计报告",
 
   renameTitle: "给农场起个名字",
@@ -443,7 +443,7 @@ const en: Record<string, string> = {
     "The CKB in the farm cell is always yours. Closing destroys the farm — gold, crops and levels — and returns the CKB to your wallet. It cannot be undone.",
   closeBtn: "Close the farm, take the CKB back",
   rulesAudit:
-    "Consolidated four model audits (Gemini 4 Neon; qwen4-max, four rounds; Claude Fable 5.2; glm-5.3-flash; latest 2026-11-23): source review, CKB-VM attack probes, and live-chain verification, 69 tests passing. The high-severity close issue and all medium-severity issues are fixed and live, and the frontend blocks OmniLock-ACP / ACP addresses from claiming. Open items remain, such as the deploy key being a single admin key; not mainnet-ready. Model audits, not a third-party audit firm.",
+    "Consolidated four model audits (Gemini 4 Neon; qwen4-max, four rounds; Claude Fable 5.2; glm-5.3-flash; latest 2026-11-23): source review, CKB-VM attack probes, and live-chain verification, 69 tests passing. The high-severity close issue and all medium-severity issues are fixed and live, and the frontend blocks OmniLock-ACP / ACP addresses from claiming. Model audits, not a third-party audit firm.",
   rulesAuditLink: "Read the audit report",
 
   renameTitle: "Name your farm",
