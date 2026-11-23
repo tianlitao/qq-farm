@@ -122,10 +122,13 @@ export function useGame() {
     [chain, signer, upsert],
   );
 
-  // Cheap poll: clock, balance, and the live cells the player is looking at —
-  // their own farm, and the one being visited. Never scans the whole world.
+  // The live cells the player is looking at: their own farm, and the one
+  // being visited.
   const mineOut = useRef<{ txHash: string; index: number } | undefined>(undefined);
   const visitedOut = useRef<{ txHash: string; index: number } | undefined>(undefined);
+
+  // Cheap poll: clock, balance, and the live cells the player is looking at —
+  // their own farm, and the one being visited. Never scans the whole world.
   const refreshCheap = useCallback(async () => {
     if (!chain || !signer) return;
     const [now, bal] = await Promise.all([chain.clock(), chain.balance(signer)]);

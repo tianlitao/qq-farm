@@ -323,3 +323,74 @@ fn r3_acp_close_deposit_must_go_home() {
     println!("R3-F1d ACP close, deposit home: {} (griefing, owner made whole)", if b.is_ok() { "ACCEPTED" } else { "refused" });
     assert!(a.is_err(), "deposit must not be skimmable");
 }
+
+/// R4: cycle re-baseline on the round-four/five binary (close checks replay
+/// the world too). Same shapes as the round-one benchmarks.
+#[test]
+fn r4_cycles_rebaseline() {
+    let mut w = World::new();
+    let mut ann = Farm::new(w.owner(1), name("ann"));
+    ann.plots[0] = plot_where(RADISH, calm);
+    let ann = w.place(1, &ann, Some(T0));
+    let bob = Farm::new(w.owner(2), name("bob"));
+    let bob = w.place(2, &bob, Some(T0));
+    let ripe = T0 + 2 * HOUR;
+    let draft = w.draft(&[(&ann, &act::steal(1, 0)), (&bob, &[])], &[2], Some(ripe)).unwrap();
+    let tx = w.build(&draft);
+    println!("R4 two-farm steal cycles: {}", w.verify(&tx).expect("ok"));
+
+    for n in [10usize, 24, 30] {
+        let mut w = World::new();
+        let mut ann = Farm::new(w.owner(1), name("ann"));
+        ann.plots[0] = plot_where(RADISH, calm);
+        let ann = w.place(1, &ann, Some(T0));
+        let mut farms: Vec<farm_tests::FarmCell> = vec![ann];
+        for p in 2..=(n as u8) {
+            let f = Farm::new(w.owner(p), name("x"));
+            farms.push(w.place(p, &f, Some(T0)));
+        }
+        let steal = Box::leak(act::steal(1, 0).into_boxed_slice());
+        let buy = Box::leak(act::buy(RADISH, 1).into_boxed_slice());
+        let pairs: Vec<(&farm_tests::FarmCell, &[u8])> = farms
+            .iter()
+            .enumerate()
+            .map(|(i, f)| (f, if i == 0 { &steal[..] } else { &buy[..] }))
+            .collect();
+        let signers: Vec<u8> = (2..=(n as u8)).collect();
+        let draft = w.draft(&pairs, &signers, Some(ripe)).unwrap();
+        let tx = w.build(&draft);
+        println!("R4 {n} active farms, one steal: {} cycles", w.verify(&tx).expect("ok"));
+    }
+}
+
+/// R4-FB3: the daily mischief limit is per FARM, not per player. Stealing was
+/// re-keyed to the owner, mischief was not: one player's second farm gets a
+/// fresh 30-a-day allowance on the same victim.
+#[test]
+fn r4_mischief_limit_is_per_farm_not_per_player() {
+    let mut w = World::new();
+    let now = T0 + 10;
+    let today = now / (HOURS_PER_DAY * UNIT);
+    let mut ann = Farm::new(w.owner(1), name("ann"));
+    ann.day = today;
+    ann.plots[0] = Plot { crop: RADISH, planted_at: T0, seed: 1, ..Plot::default() };
+    ann.plots[1] = Plot { crop: RADISH, planted_at: T0, seed: 2, ..Plot::default() };
+    let ann = w.place(1, &ann, Some(T0));
+    let mut bob = Farm::new(w.owner(2), name("bob"));
+    bob.day = today;
+    bob.mischief_today = MISCHIEF_PER_DAY; // used up on farm 1
+    let bob = w.place(2, &bob, Some(T0));
+    let mut bob2 = Farm::new(w.owner(2), name("bob2")); // same player, farm 2
+    bob2.day = today;
+    let bob2 = w.place(9, &bob2, Some(T0));
+    let weed = act::mischief(1, 0, KIND_WEED);
+    // Farm 1 is refused (limit)…
+    assert_eq!(w.refused(&[(&ann, &weed), (&bob, &[])], &[2], Some(now)), Error::MischiefLimit);
+    // …but the same player's farm 2 plants it fine.
+    let cells = w.play(&[(&ann, &weed), (&bob2, &[])], &[2], Some(now), now + 5);
+    println!(
+        "R4-FB3 {}: same owner's second farm mischief after limit, bob2 mischief_today={}",
+        if cells[1].farm().mischief_today == 1 { "CONFIRMED" } else { "fixed?" },
+        cells[1].farm().mischief_today
+    );
+}

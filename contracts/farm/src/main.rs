@@ -10,7 +10,8 @@
 //! * actions of the owner need an input locked by the owner; visitors need the
 //!   same for their own farm;
 //! * CKB can be added to a farm cell but never taken out, except by the owner
-//!   closing the farm.
+//!   closing the farm; a farm that is closed takes no part in the others'
+//!   actions.
 //!
 //! As a **lock script** (no args) it lets anybody spend the cell, as long as
 //! the cell carries the farm type script. That is what lets a neighbour drop
@@ -34,7 +35,7 @@ use ckb_std::{
     },
     type_id::check_type_id,
 };
-use farm_core::{transition, BlockRef, Clock, Farm, FarmInput, MAX_STATE_LEN, MAX_UNIT};
+use farm_core::{is_visitor, transition, BlockRef, Clock, Farm, FarmInput, MAX_STATE_LEN, MAX_UNIT};
 
 ckb_std::entry!(program_entry);
 ckb_std::default_alloc!();
@@ -54,6 +55,7 @@ const E_TOO_MANY_INPUTS: i8 = 50;
 const E_NOTHING_HAPPENED: i8 = 51;
 const E_CLOSE_WITH_ACTIONS: i8 = 52;
 const E_TIME: i8 = 53;
+const E_CLOSING_VISITOR: i8 = 54;
 
 /// The most a closing transaction may keep back from the owner as its fee, in
 /// shannons (1 CKB). Real fees are a few thousand shannons.
@@ -117,7 +119,7 @@ fn check_type(me: &Script, args: &[u8]) -> Result<(), i8> {
     match (present(Source::GroupInput)?, present(Source::GroupOutput)?) {
         (false, true) => create(me),
         (true, true) => update(me, args, unit),
-        (true, false) => close(me),
+        (true, false) => close(me, args, unit),
         (false, false) => Err(E_SYSCALL),
     }
 }
@@ -213,7 +215,7 @@ fn create(me: &Script) -> Result<(), i8> {
     Ok(())
 }
 
-fn close(me: &Script) -> Result<(), i8> {
+fn close(me: &Script, args: &[u8], unit: u32) -> Result<(), i8> {
     let data = load_cell_data(0, Source::GroupInput).map_err(sys)?;
     let farm = Farm::decode(&data).map_err(|e| e as i8)?;
     // The other farms in the transaction replay this farm's action list, and
@@ -233,6 +235,14 @@ fn close(me: &Script) -> Result<(), i8> {
     let gained = -flow.spent;
     if gained + CLOSE_FEE_ALLOWANCE < closing_deposits(me, &farm.owner)? {
         return Err(E_NOT_OWNER);
+    }
+    // There is no output to hold what this farm does elsewhere either: a farm
+    // that leaves cannot be the visitor of another, or the day's mischief
+    // limit would not count on the way out.
+    let (cells, mine) = world(me, args)?;
+    let clock = Clock { now: proven_time()?, unit };
+    if is_visitor(&inputs(&cells), mine, clock).map_err(|e| e as i8)? {
+        return Err(E_CLOSING_VISITOR);
     }
     Ok(())
 }
@@ -286,15 +296,8 @@ struct FarmCell {
     actions: Vec<u8>,
 }
 
-fn update(me: &Script, args: &[u8], unit: u32) -> Result<(), i8> {
-    check_output_lock(me)?;
-    let capacity_in = load_cell_capacity(0, Source::GroupInput).map_err(sys)?;
-    let capacity_out = load_cell_capacity(0, Source::GroupOutput).map_err(sys)?;
-    if capacity_out < capacity_in {
-        return Err(E_CAPACITY);
-    }
-
-    // Every farm of this world among the inputs.
+/// Every farm of this world among the inputs, and which of them is this one.
+fn world(me: &Script, args: &[u8]) -> Result<(Vec<FarmCell>, usize), i8> {
     let mut cells: Vec<FarmCell> = Vec::new();
     let mut mine = None;
     for (index, ty) in QueryIter::new(load_cell_type, Source::Input).enumerate() {
@@ -319,8 +322,11 @@ fn update(me: &Script, args: &[u8], unit: u32) -> Result<(), i8> {
             actions: load_actions(index, Source::Input)?,
         });
     }
-    let mine = mine.ok_or(E_SYSCALL)?;
-    let farms: Vec<FarmInput> = cells
+    Ok((cells, mine.ok_or(E_SYSCALL)?))
+}
+
+fn inputs(cells: &[FarmCell]) -> Vec<FarmInput<'_>> {
+    cells
         .iter()
         .map(|cell| FarmInput {
             index: cell.index,
@@ -329,7 +335,19 @@ fn update(me: &Script, args: &[u8], unit: u32) -> Result<(), i8> {
             block: cell.block,
             actions: &cell.actions,
         })
-        .collect();
+        .collect()
+}
+
+fn update(me: &Script, args: &[u8], unit: u32) -> Result<(), i8> {
+    check_output_lock(me)?;
+    let capacity_in = load_cell_capacity(0, Source::GroupInput).map_err(sys)?;
+    let capacity_out = load_cell_capacity(0, Source::GroupOutput).map_err(sys)?;
+    if capacity_out < capacity_in {
+        return Err(E_CAPACITY);
+    }
+
+    let (cells, mine) = world(me, args)?;
+    let farms = inputs(&cells);
 
     let clock = Clock { now: proven_time()?, unit };
     let outcome = transition(&farms, mine, clock).map_err(|e| e as i8)?;

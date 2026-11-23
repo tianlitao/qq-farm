@@ -121,7 +121,8 @@ function visit(mine: FarmCell, farms: FarmCell[], now: number): { moves: Move[];
   const host = others[Math.floor(Math.random() * others.length)];
   const there = (action: Move["action"]): Move => ({ farm: host.id, action });
   const moves: Move[] = [];
-  const v = view(host, now, chain.unit, mine.idBytes);
+  // The rules know a thief by the owner lock hash in their farm's state.
+  const v = view(host, now, chain.unit, mine.state.slice(1, 33));
   for (const { plot, index } of grown(v)) {
     if (plot.withered) continue;
     if (plot.steal > 0) moves.push(there({ op: "steal", plot: index }));

@@ -25,7 +25,8 @@ const say = (text: string) => console.log(`${String(++step).padStart(2)}. ${text
 
 async function look(farm: FarmCell, viewer?: FarmCell): Promise<FarmView> {
   const clock = await chain.clock();
-  return view(farm, clock.timestamp, chain.unit, viewer?.idBytes);
+  // The rules know a thief by the owner lock hash in their farm's state.
+  return view(farm, clock.timestamp, chain.unit, viewer?.state.slice(1, 33));
 }
 
 /** The farm as the node holds it now. */

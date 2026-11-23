@@ -1,0 +1,12 @@
+# The compiler is part of the contract: build/farm and build/type-id are
+# referenced on chain by their hash, and another rustc produces other bytes.
+# With this pin `scripts/build-contract.sh` gives the committed binaries back,
+# so anybody can check that the code cell runs this source.
+#
+# Moving to a newer compiler changes the binary, which means an upgrade of the
+# code cell. Do it on purpose: bump the channel, rebuild, re-run the tests,
+# then `npm run upgrade`.
+[toolchain]
+channel = "1.98.1"
+targets = ["riscv64imac-unknown-none-elf", "wasm32-unknown-unknown"]
+profile = "minimal"

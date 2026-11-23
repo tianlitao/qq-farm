@@ -906,3 +906,31 @@ pub fn transition(farms: &[FarmInput], me: usize, clock: Clock) -> Result<Outcom
     }
     Ok(Outcome { farm, needs_owner })
 }
+
+/// Does another farm in the transaction name `farms[me]` as its visitor?
+///
+/// A farm that is closed has no output to hold the visitor's half of a visit
+/// (the stolen fruit, the day's mischief count), so its script refuses the
+/// close when this is true. Farms without actions are not looked at: they
+/// cannot name anybody, and one that is closed too may lack its header.
+pub fn is_visitor(farms: &[FarmInput], me: usize, clock: Clock) -> Result<bool> {
+    if clock.unit == 0 || clock.unit > MAX_UNIT {
+        return Err(Error::BadUnit);
+    }
+    let mine = farms[me].index;
+    let mut named = false;
+    for (i, other) in farms.iter().enumerate() {
+        if i == me || other.actions.is_empty() {
+            continue;
+        }
+        // The same replay the other farm's own script run does.
+        let mut theirs = Farm::decode(other.state)?;
+        settle(&mut theirs, &other.id, other.block.as_ref())?;
+        roll_day(&mut theirs, clock.now, clock.unit);
+        run_actions(&mut theirs, other, farms, clock, &mut |actor, _| {
+            named |= actor == mine;
+            Ok(())
+        })?;
+    }
+    Ok(named)
+}

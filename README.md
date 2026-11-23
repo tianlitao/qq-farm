@@ -2,7 +2,7 @@
 
 一个完全跑在 [Nervos CKB](https://www.nervos.org/) 上的种菜、偷菜游戏。开垦、播种、除草除虫浇水、收获、卖菜、扩地、养狗，以及去邻居地里摘菜、帮忙、放草放虫，全部由一份链上合约验算。没有服务器；存档和判定都在链上，当前规则下谁也不能单方面动你的农场。合约**可以由部署者公开升级**（见下文"升级与信任模型"）：升级换的是规则代码，type id 不变、每一次升级链上可查；但升级权是真实的权力，玩之前请读那一节。
 
-**已审计（qwen4-max，2026-11-21，三轮）**：源码逐行审查 + 真实 CKB-VM 攻击探针 + 本地链/测试网实链验证，54 个测试在 HEAD 二进制上全部通过（工作区含未部署的 close 修复，重编后 58 个）。完整报告见 [AUDIT.md](AUDIT.md)。结论：**尚不具备上主网条件**——第三轮发现 close 授权可被"小费"伪造（任何人无需主人签名即可关闭他人农场，高危；修复已在工作区写出并通过隔离验证，但尚未提交部署，链上仍是含漏洞的二进制），另有经验循环刷取与主网客户端接线错误。Sybil 防偷已修复并回归验证。这是模型审计，不等同第三方审计公司。
+**已审计（多份模型审计）**：[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮，2026-11-23 最新）、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2，2026-11-23）、[AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)（glm-5.3-flash）。方法都是源码逐行审查 + 真实 CKB-VM 攻击探针 + 本地链/测试网实链验证；66 个测试在当前二进制上全部通过。审计发现的高危漏洞（任何人可用一笔"小费"关闭别人的农场）**已修复并在本地链和测试网上线**，第四轮在当前链上二进制上复验全部攻击转为拒绝。复审中发现的低危问题（关闭中的农场能绕过每日使坏上限）**也已修复并上线**。还开着的问题：部署钥匙是单把热钥匙、使坏上限按农场计而不是按玩家计（低危，第四轮实证）、陌生人可以反复碰你的农场 cell 让你的交易作废。**没有部署到主网**；这些是模型审计，不等同第三方审计公司。
 
 玩法是经典的社交农场那一类，但这是一个原创游戏：名字、美术、数值和界面都是这个项目自己的，没有使用任何现成游戏的素材。
 
@@ -115,8 +115,8 @@ build/type-id      编译好的 type-id 校验器（约 28 KB）
 ## 开发
 
 ```bash
-cargo test -p farm-tests          # 43 个测试：规则 9、合约 20、升级路径 5、审计探针 9，全部跑在真实 CKB-VM 里
-scripts/build-contract.sh         # 需要 rustup target add riscv64imac-unknown-none-elf
+cargo test -p farm-tests          # 66 个测试：规则 9、合约 20、升级路径 5、四轮审计探针 32，全部跑在真实 CKB-VM 里
+scripts/build-contract.sh         # 编译器版本由 rust-toolchain.toml 锁定；需要 riscv64imac-unknown-none-elf 目标
 scripts/build-wasm.sh             # 需要 rustup target add wasm32-unknown-unknown
 ```
 
@@ -131,7 +131,7 @@ npm run build                     # 类型检查并打包
 
 ### 网络
 
-`VITE_NETWORK`（见 `.env.example`）：`devnet` 本地链 / `testnet` 测试网 / `mainnet` 主网。主网配置已就位（RPC、浏览器、headerLag），合约尚未部署到主网——部署与升级脚本对主网要求显式 `--privkey` 加 `--yes` 双重确认，真金白银，请先读完审计报告。
+`VITE_NETWORK`（见 `.env.example`）：`devnet` 本地链 / `testnet` 测试网 / `mainnet` 主网。主网配置已就位（RPC、浏览器、headerLag），合约尚未部署到主网——部署与升级脚本对主网要求显式 `--keyfile` 加 `--yes` 双重确认，真金白银，请先读完审计报告。
 
 ### 测试网
 
@@ -140,7 +140,7 @@ npm run build                     # 类型检查并打包
 - **type-id 校验器 cell**：锁是全零哈希（永远打不开），代码 cell 的 type script 就是它。它保证代码 cell 的 type id 只此一份、升级时不会漂移。
 - **代码 cell**：锁是部署者的锁，data 是农场二进制。农场 cell 用 `hash_type: "type"` 引用代码 cell 的 type script 哈希，所以升级后所有农场原地运行新代码。
 
-当前版本：代码 cell 交易 `0x5c5c94acec18dd9c68daf2641b6573fb4db2bba9cec85ca22cb6de80093cdf18`，引用哈希（code script hash）`0x0253fea2b3d45853c5381fb20ed7efffce8f79cfbb059e1ea3befddf299f775d`，版本哈希 `0xd80c8921d405ec32160ba3d3c0db8a6c7d1060b836540b655a9e9bdfe55f6649`，游戏时速 3600 秒/小时。**注意：此链上二进制含审计 R3-F1 高危漏洞，close 修复尚未部署。** 最新记录以 `web/src/chain/deployments.json` 为准。网页默认跑测试网；跑本地链则在 `web/.env` 里写 `VITE_NETWORK=devnet`。
+当前版本：代码 cell 交易 `0x130bdcf7c8b9b4c5b4b81c3ab5b05ecc9d3b402b5cc780bfc51d6dbb2f3742c7`，引用哈希（code script hash）`0x0253fea2b3d45853c5381fb20ed7efffce8f79cfbb059e1ea3befddf299f775d`，版本哈希 `0xec8803d81c086f93e41335e74b375ba506d3ce54abd8cf354c26ac7c9469cad4`，游戏时速 3600 秒/小时。这是含 close 修复和"关闭中的农场不能当访客"修复的二进制，2026-11-23 升级，升级后核对过链上数据哈希与 `build/farm` 一致，并在测试网真实节点上实测攻击被拒（错误码 54）。升级后要重新发布网页，旧页面记的代码 cell 位置已失效。最新记录以 `web/src/chain/deployments.json` 为准。网页默认跑测试网；跑本地链则在 `web/.env` 里写 `VITE_NETWORK=devnet`。
 
 测试网用 CCC 的钱包连接器登录：网页上是"连接钱包"按钮，支持 JoyID、MetaMask、OKX、UniSat 等。钱包需要有测试网 CKB（[水龙头](https://faucet.nervos.org/)）才能付手续费和创建农场 cell。本地链仍使用内置测试账户，不需要钱包。
 
@@ -153,16 +153,18 @@ cd web
 npm run key:new -- deployer          # 生成 keys/deployer.key（0600，已 gitignore，拒绝覆盖）
 npm run key:info -- deployer         # 地址与余额；去水龙头充值后部署
 npm run build                        # 首次部署需要先构建合约
-npx tsx scripts/deploy.ts --network testnet --privkey "$(cat keys/deployer.key)"
+npx tsx scripts/deploy.ts --network testnet --keyfile keys/deployer.key
 ```
 
-主网部署再加一道门：`--network mainnet --yes --privkey …`，缺一不可。
+钥匙只从文件读（`--keyfile <路径>` 或环境变量 `FARM_KEYFILE`），不再接受 `--privkey`：命令行参数会留在 shell 历史里，也会出现在本机所有用户都能看到的进程列表里。钥匙文件权限必须是 600，否则脚本拒绝执行。
+
+主网部署再加一道门：`--network mainnet --yes --keyfile …`，缺一不可。
 
 **两个部署 cell 都是可回收的**（校验器默认由部署者的锁看守，加 `--immortal-validator` 可改回全零锁的永生模式）。关服流程：
 
 ```bash
 cd web
-npm run shutdown:testnet -- --yes    # 或 --network mainnet
+npm run shutdown:testnet -- --keyfile keys/deployer.key    # 主网：--network mainnet --yes --keyfile …
 ```
 
 脚本会拒绝在还有农场未关闭时执行（烧掉代码 cell 会把未关闭农场的押金永久冻结），把两笔容量——代码 cell 约 49,500 CKB、校验器约 28,400 CKB——全额退回部署者地址，并移除部署记录（站点随即显示"未部署"）。校验器若由私钥看守，持有者也能**搬移**它（同二进制换新 outpoint），引用按数据哈希解析、不受影响。
@@ -171,7 +173,7 @@ npm run shutdown:testnet -- --yes    # 或 --network mainnet
 
 ```bash
 bash scripts/build-contract.sh && bash scripts/build-wasm.sh
-cd web && npx tsx scripts/upgrade.ts --network testnet --privkey 0x你的私钥
+cd web && npx tsx scripts/upgrade.ts --network testnet --keyfile keys/deployer.key
 npm run build && npm run deploy:pages   # 前端记录更新后重新发布网页
 ```
 
@@ -197,7 +199,8 @@ npm run build && npm run deploy:pages   # 前端记录更新后重新发布网�
 
 已验证的：
 
-- 43 个 Rust 测试全部通过，全部跑在真实的 CKB-VM 里：规则 9、农场合约 20、升级路径 5、审计探针 9。
+- 65 个 Rust 测试全部通过，全部跑在真实的 CKB-VM 里：规则 9、农场合约 20、升级路径 5、四轮审计探针 32。
+- 构建可复现（本机）：`rust-toolchain.toml` 锁定 rustc 1.98.1，重编译出的 `build/farm`、`build/type-id` 和前端 WASM 与提交的逐字节一致。别的机器上尚未验证。
 - 可升级部署在本地链上完整验证过（独立复跑）：改 `INIT_GOLD` 500→600、`npm run upgrade` 原地升级、新农场拿到 600 金币、**升级前创建的老农场在新二进制下继续买种播种**、再升级回 500 后新农场恢复 500、老农场关闭收回 CKB；全程 code script hash 不变。
 - 测试网 v2 部署核对过：代码 cell 与校验器均存活，链上数据哈希、type script 哈希与 `deployments.json` 记录逐项一致；v2 世界里有真实玩家农场在正常游玩。
 - `npm run e2e` 在本地节点上通过全部 13 步：开垦、陌生人不能花主人的金币、播种、未熟不能收也不能偷、邻居无需主人签名放草、处理、成熟、偷摘、不能重复偷、收获卖出、伪造状态被合约拒绝、主人收回农场。
@@ -211,7 +214,9 @@ npm run build && npm run deploy:pages   # 前端记录更新后重新发布网�
 - **没有部署到主网。** 只有本地链和测试网。
 - **主网客户端接线已修复（审计 R3-F4）。** `createClient("mainnet")` 现在返回 `ClientPublicMainnet` 连主网 RPC；`key.ts` 走同一入口。仍未做的是用真实钱包在主网完整走一遍（主网合约也尚未部署）。
 - **没有用真实钱包私钥在浏览器里登录过。** CCC 钱包选择器已接好，但这里没有 JoyID、MetaMask 等钱包的私钥；测试网交易用私钥账号验证过。
-- **已审计：qwen4-max（2026-11-21，三轮），报告见 [AUDIT.md](AUDIT.md)。** 含 CKB-VM 攻击探针与实链验证；属模型审计，没有第三方审计公司复核。在放真钱之前请当它是实验品。已知未修的问题见下。
+- **已审计：多份模型审计**，最新的是 [AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮，2026-11-23）与 [AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2，2026-11-23），另有 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)。含 CKB-VM 攻击探针与实链验证；属模型审计，没有第三方审计公司复核。在放真钱之前请当它是实验品。已知问题见下。
+- **【部分修复，低危】每日使坏上限（Fable 5.2 报告 FB-2、FB-3）。** 在关闭自己农场的那笔交易里放草放虫不计次数——这一条已修（合约以错误码 54 拒绝），本地链和测试网都已上线。没修的是：同一玩家的第二座农场另有 30 次。硬边界是每块地每季最多一草一虫。不涉及 CKB。
+- **【未修】陌生人可以反复碰你的农场 cell（FB-5）。** 放一棵草再拔掉，农场状态不变但 cell 换了位置，你在途的交易（包括关闭）会作废，需要重发。对方只付手续费，拿不到任何东西。
 - **【已修复上线】close 授权的"小费"伪造（审计 R3-F1）。** 第二轮的方向授权在关闭路径可被小费伪造（给主人锁转 61 CKB 即满足"主人收钱"，攻击者净赚约 270 CKB）。修复改为**双条件**：close 要求 owner 锁的 cell 在输入中（强签名锁 = 主人签了整笔交易）**且**被关闭农场的押金全额流回 owner（只允许 ≤1 CKB 的手续费差）。多座农场同时关闭时押金合并计算，一份退款不能替两次关闭作保。探针 `r3_stranger_closes_farm_for_a_tip` 等三例全部转为拒绝。**对 ACP 锁残留**：攻击者自掏押金赠回 owner 可强制关闭（纯亏本破坏，受害者资金无损），与 glm 报告 V1 残留一致。
 - **【已修复上线】放草-帮忙循环白刷经验（审计 R3-F2）。** 修复后帮助经验**只计自然问题**的清除：清他人放的草仍是善行（交易有效、计入每日帮助次数）但不再给经验，同笔交易的放草-拔草循环收益归零。回归探针断言零经验（`probe_exp_from_clearing_own_mischief`）。
 - **防偷 Sybil 已修复（按 owner 锁哈希计槽位），狗仍可研磨（审计 R3-F3）。** 同一玩家多座农场偷不到第二次（回归验证通过）；但狗判定是 (owner, 公开 seed) 的确定性函数，新钱包钥匙可离线研磨避开（实测约 3 万次尝试）。40% 总上限仍是唯一硬边界，应理解为"每季固定上限损失"。

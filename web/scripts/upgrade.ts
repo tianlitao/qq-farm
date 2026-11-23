@@ -4,7 +4,7 @@
 // the next transaction on.
 //
 //   npm run build && npm run upgrade                 # devnet
-//   npm run build && npx tsx scripts/upgrade.ts --network testnet --privkey 0x...
+//   npm run build && npx tsx scripts/upgrade.ts --network testnet --keyfile keys/deployer.key
 //
 // The type-id validator (see scripts/deploy.ts) makes the swap honest: the
 // recreated cell keeps its type id, and nobody but the deployer can spend the
@@ -14,18 +14,17 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { DEVNET_ACCOUNTS, type NetworkId, createClient } from "../src/chain/network";
-import { ROOT, arg, readDeployments, writeDeployment } from "./env";
+import { type NetworkId, createClient } from "../src/chain/network";
+import { ROOT, arg, readDeployments, signingKey, writeDeployment } from "./env";
 
 const network = (arg("network", "devnet") as NetworkId)!;
-const key = arg("privkey", network === "devnet" ? DEVNET_ACCOUNTS[7].key : undefined);
-if (!key) throw new Error("--privkey is required outside the dev chain");
 if (network === "mainnet" && !process.argv.includes("--yes")) {
   throw new Error(
     "this upgrades the contract on the CKB MAINNET for every farm. Re-read AUDIT-*.md first, " +
-      "then pass --yes together with the dedicated mainnet key.",
+      "then pass --yes together with the --keyfile of the dedicated mainnet key.",
   );
 }
+const key = signingKey(network);
 
 const deployment = readDeployments()[network];
 if (deployment?.version !== 2) {

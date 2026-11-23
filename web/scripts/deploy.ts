@@ -1,11 +1,14 @@
 // Puts the farm script on chain and records where.
 //
 //   npm run deploy:devnet
-//   npx tsx scripts/deploy.ts --network testnet --privkey 0x... [--unit 3600]
+//   npx tsx scripts/deploy.ts --network testnet --keyfile keys/deployer.key [--unit 3600]
+//
+// The key is read from a file, never from the command line (see `signingKey`).
 //
 // Two cells:
-// * a type-id validator, locked by nobody (an all-zero hash no cell can have),
-//   so it is immutable and forever;
+// * a type-id validator, locked by the deployer (so a shutdown can recover its
+//   CKB), or with --immortal-validator by nobody: an all-zero hash no cell can
+//   have, immutable and forever;
 // * the farm code cell, locked by the deployer. Its type script is the
 //   validator, which pins one type id to it. Farm cells reference the code cell
 //   by that type id (hash type "type"), so `npm run upgrade` can spend the code
@@ -15,20 +18,19 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { DEVNET_ACCOUNTS, type NetworkId, createClient } from "../src/chain/network";
-import { ROOT, arg, readDeployments, writeDeployment } from "./env";
+import { type NetworkId, createClient } from "../src/chain/network";
+import { ROOT, arg, readDeployments, signingKey, writeDeployment } from "./env";
 
 const network = (arg("network", "devnet") as NetworkId)!;
 const unit = Number(arg("unit", network === "devnet" ? "30" : "3600"));
-const key = arg("privkey", network === "devnet" ? DEVNET_ACCOUNTS[7].key : undefined);
-if (!key) throw new Error("--privkey is required outside the dev chain");
 if (!(unit >= 1 && unit <= 3600)) throw new Error("--unit must be 1..3600 seconds");
 if (network === "mainnet" && !process.argv.includes("--yes")) {
   throw new Error(
     "this deploys to the CKB MAINNET with real CKB at stake. Re-read AUDIT-*.md first, " +
-      "then pass --yes together with a dedicated --privkey (never a throwaway test key).",
+      "then pass --yes together with the --keyfile of a dedicated key (never a throwaway test key).",
   );
 }
+const key = signingKey(network);
 
 const client = createClient(network);
 const signer = new ccc.SignerCkbPrivateKey(client, key);

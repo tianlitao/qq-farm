@@ -37,7 +37,7 @@ if (action === "new") {
   const signer = new ccc.SignerCkbPrivateKey(client, key);
   console.log(`generated ${file} (mode 0600, gitignored)`);
   console.log(`address (${network}):`, await signer.getRecommendedAddress());
-  console.log(`fund it, then deploy with: npx tsx scripts/deploy.ts --network ${network} --privkey "$(cat ${file})"`);
+  console.log(`fund it, then deploy with: npx tsx scripts/deploy.ts --network ${network} --keyfile ${file}`);
   process.exit(0);
 }
 

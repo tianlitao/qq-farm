@@ -3,7 +3,7 @@
 // validator (~28.4k CKB). Both are locked by the deployer, so both come home.
 //
 //   npm run shutdown                                  # devnet
-//   npm run shutdown:testnet -- --yes
+//   npm run shutdown:testnet -- --keyfile keys/deployer.key
 //
 // Safety rails: refuses while farm cells remain (their owners must close them
 // first — burning the code cell freezes any farm left open for ever), and
@@ -11,18 +11,16 @@
 // deployment record is removed; the site shows "not deployed".
 
 import { ccc } from "@ckb-ccc/ccc";
-import { arg, readDeployments, removeDeployment } from "./env";
-import { DEVNET_ACCOUNTS, type NetworkId, createClient } from "../src/chain/network";
+import { arg, readDeployments, removeDeployment, signingKey } from "./env";
+import { type NetworkId, createClient } from "../src/chain/network";
 
 const network = (arg("network", "devnet") as NetworkId)!;
-let key = arg("privkey");
-if (!key && network === "devnet") key = DEVNET_ACCOUNTS[7].key;
-if (!key) throw new Error(`--privkey is required on ${network}`);
 if (network === "mainnet" && !process.argv.includes("--yes")) {
   throw new Error(
     "shutting down on the MAINNET is irreversible for every player — close all farms first, then pass --yes.",
   );
 }
+const key = signingKey(network);
 
 const deployment = readDeployments()[network];
 if (deployment?.version !== 2) throw new Error(`no deployment record on ${network}`);

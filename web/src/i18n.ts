@@ -211,7 +211,7 @@ const zh: Record<string, string> = {
     "农场格子里押着的 CKB 始终是你的。收回农场会销毁这座农场连同里面的金币、作物和等级，把 CKB 退回钱包，无法撤销。",
   closeBtn: "收回农场，取回 CKB",
   rulesAudit:
-    "已审计：qwen4-max（2026-11-21，三轮），源码审查 + CKB-VM 攻击探针 + 实链验证。当前仍有未修的高危问题（close 授权可被伪造），尚不具备上主网条件。模型审计，不等同第三方审计公司。",
+    "已做多份模型审计（qwen4-max 四轮、Claude Fable 5.2、glm-5.3-flash，最新 2026-11-23）：源码审查 + CKB-VM 攻击探针 + 实链验证，66 个测试全过。审计发现的高危问题（任何人可关闭别人的农场）已修复并上线复验。仍有未解决的事项（部署钥匙是单把管理员钥匙等），尚不具备上主网条件。模型审计，不等同第三方审计公司。",
   rulesAuditLink: "查看审计报告",
 
   renameTitle: "给农场起个名字",
@@ -281,6 +281,7 @@ const zh: Record<string, string> = {
   err51: "不能无故动用别人的农场",
   err52: "关闭农场时不能附带操作",
   err53: "区块时间超出范围",
+  err54: "正在关闭的农场不能再去串门",
   errUnknown: "合约拒绝了这笔交易（代码 {code}）",
 };
 
@@ -438,7 +439,7 @@ const en: Record<string, string> = {
     "The CKB in the farm cell is always yours. Closing destroys the farm — gold, crops and levels — and returns the CKB to your wallet. It cannot be undone.",
   closeBtn: "Close the farm, take the CKB back",
   rulesAudit:
-    "Audited by qwen4-max (2026-11-21, three rounds): source review, CKB-VM attack probes, and live-chain verification. A high-severity issue is still open (close authorization can be forged); not mainnet-ready. A model audit, not a third-party audit firm.",
+    "Several model audits (qwen4-max, four rounds; Claude Fable 5.2; glm-5.3-flash; latest 2026-11-23): source review, CKB-VM attack probes, and live-chain verification, 66 tests passing. The high-severity issue they found (anyone could close somebody else's farm) is fixed, live, and re-verified. Open items remain, such as the deploy key being a single admin key; not mainnet-ready. Model audits, not a third-party audit firm.",
   rulesAuditLink: "Read the audit report",
 
   renameTitle: "Name your farm",
@@ -508,6 +509,7 @@ const en: Record<string, string> = {
   err51: "no reason to touch somebody else's farm",
   err52: "closing cannot carry actions",
   err53: "block time out of range",
+  err54: "a farm that is being closed cannot visit another",
   errUnknown: "the contract refused this transaction (code {code})",
 };
 
