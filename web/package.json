@@ -14,7 +14,8 @@
     "key:info": "tsx scripts/key.ts",
     "shutdown": "tsx scripts/shutdown.ts",
     "shutdown:testnet": "tsx scripts/shutdown.ts --network testnet",
-    "deploy:pages": "npm run build && wrangler pages deploy dist --project-name ckb-farm --branch main",
+    "deploy:pages": "VITE_NETWORK=mainnet npm run build && wrangler pages deploy dist --project-name ckb-farm --branch main",
+    "deploy:pages:testnet": "VITE_NETWORK=testnet npm run build && wrangler pages deploy dist --project-name ckb-farm-testnet --branch main",
     "bots": "tsx scripts/bots.ts",
     "e2e": "tsx scripts/e2e.ts"
   },
