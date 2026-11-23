@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bug, Coin, CropIcon, Dog, Drop, Plant, type Stage, Weed } from "./art/crops";
+import {
+  BarnIcon,
+  BoneIcon,
+  BookIcon,
+  BrandLogo,
+  DoghouseArt,
+  EditIcon,
+  FenceIcon,
+  HandIcon,
+  HarvestIcon,
+  HomeIcon,
+  ShovelIcon,
+  TendIcon,
+} from "./art/icons";
 import { SceneBackdrop } from "./art/scene";
 import { t, useLang, cropName } from "./i18n";
 import type { Move } from "./chain/farm";
@@ -161,15 +175,40 @@ export function App() {
 
   const plots = shown.plots.map((plot, index) => ({ plot, index }));
   const growing = plots.filter((x) => x.plot.crop) as { plot: PlotView; index: number }[];
-  const batchList: { label: string; moves: Move[] }[] = away
-    ? [{ label: t("harvestAll"), moves: growing.filter((x) => x.plot.steal > 0).map((x) => them({ op: "steal", plot: x.index })) }]
+  const batchList: { key: string; label: string; icon: React.ReactNode; moves: Move[] }[] = away
+    ? [
+        {
+          key: "steal",
+          label: t("harvestAll"),
+          icon: <HarvestIcon size={16} />,
+          moves: growing.filter((x) => x.plot.steal > 0).map((x) => them({ op: "steal", plot: x.index })),
+        },
+        {
+          key: "help",
+          label: t("tidyAll"),
+          icon: <TendIcon size={16} />,
+          moves: growing.filter((x) => !x.plot.withered).flatMap((x) => chores(x.plot, x.index, "help").map(them)),
+        },
+      ]
     : [
         {
+          key: "harvest",
           label: t("harvestAll"),
+          icon: <HarvestIcon size={16} />,
           moves: growing.filter((x) => x.plot.ripe && !x.plot.problems.some(Boolean)).map((x) => me({ op: "harvest", plot: x.index })),
         },
-        { label: t("tidyAll"), moves: growing.filter((x) => !x.plot.withered).flatMap((x) => chores(x.plot, x.index, "clear").map(me)) },
-        { label: t("shovelAll"), moves: growing.filter((x) => x.plot.withered).map((x) => me({ op: "shovel", plot: x.index })) },
+        {
+          key: "tidy",
+          label: t("tidyAll"),
+          icon: <TendIcon size={16} />,
+          moves: growing.filter((x) => !x.plot.withered).flatMap((x) => chores(x.plot, x.index, "clear").map(me)),
+        },
+        {
+          key: "shovel",
+          label: t("shovelAll"),
+          icon: <ShovelIcon size={16} />,
+          moves: growing.filter((x) => x.plot.withered).map((x) => me({ op: "shovel", plot: x.index })),
+        },
       ];
   const empty = plots.filter((x) => !x.plot.crop).map((x) => x.index);
   const next = mine.land < catalog.maxPlots ? catalog.expand[mine.land - catalog.initPlots] : undefined;
@@ -177,46 +216,56 @@ export function App() {
   return (
     <Shell game={game} farm={mine}>
       <main className="scene">
-        <div className="sign">
-          {away ? (
-            <>
-              <span className="sign-name">{away.name || t("unnamedFarm")}</span>
-              <span className="sign-sub">{t("visiting", { level: away.level })}</span>
-              <button className="btn small" onClick={() => game.visit(undefined)}>
-                {t("backHome")}
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="sign-name">{mine.name || t("myFarmFallback")}</span>
-              <button className="link" onClick={() => setDialog("rename")}>
-                {t("rename")}
-              </button>
-            </>
-          )}
-        </div>
-
-        <div className="quick">
-          {batchList.map(({ label, moves }) => (
-            <button key={label} className="btn small" disabled={moves.length === 0} onClick={() => game.add(...moves)}>
-              {label}
-              {moves.length > 0 && <b>{moves.length}</b>}
-            </button>
-          ))}
-          {!away && (
-            <button className="btn small" disabled={empty.length === 0} onClick={() => sow(empty)}>
-              {t("sowAll", { crop: cropName(seed) })}
-            </button>
-          )}
-          {away && (
-            <span className="tools" role="group" aria-label={t("visitTools")}>
-              {(["hand", "weed", "pest"] as const).map((k) => (
-                <button key={k} className={`btn small ${tool === k ? "on" : ""}`} aria-pressed={tool === k} onClick={() => setTool(k)}>
-                  {t(k === "hand" ? "toolHand" : k === "weed" ? "toolWeed" : "toolPest")}
+        <div className="farm-header">
+          <div className={`sign ${away ? "visiting-sign" : ""}`}>
+            {away ? (
+              <>
+                <span className="sign-name">{away.name || t("unnamedFarm")}</span>
+                <span className="sign-sub">{t("visiting", { level: away.level })}</span>
+                <button className="btn small" onClick={() => game.visit(undefined)}>
+                  <HomeIcon size={15} />
+                  {t("backHome")}
                 </button>
-              ))}
-            </span>
-          )}
+              </>
+            ) : (
+              <>
+                <span className="sign-name">{mine.name || t("myFarmFallback")}</span>
+                <button className="link" onClick={() => setDialog("rename")}>
+                  <EditIcon size={13} />
+                  {t("rename")}
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="quick quick-bar">
+            {batchList.map(({ key, label, icon, moves }) => (
+              <button key={key} className="btn small" disabled={moves.length === 0} onClick={() => game.add(...moves)}>
+                {icon}
+                {label}
+                {moves.length > 0 && <b>{moves.length}</b>}
+              </button>
+            ))}
+            {!away && (
+              <button className="btn small" disabled={empty.length === 0} onClick={() => sow(empty)}>
+                <CropIcon id={seed} size={18} />
+                {t("sowAll", { crop: cropName(seed) })}
+              </button>
+            )}
+            {away && (
+              <>
+                <span className="quick-sep" aria-hidden="true" />
+                <span className="tools" role="group" aria-label={t("visitTools")} title={t("visitTools")}>
+                  {(["hand", "weed", "pest"] as const).map((k) => (
+                    <button key={k} className={`tool-tab ${tool === k ? "on" : ""}`} aria-pressed={tool === k} onClick={() => setTool(k)}>
+                      {k === "hand" ? <HandIcon size={15} /> : k === "weed" ? <Weed size={16} /> : <Bug size={16} />}
+                      {t(k === "hand" ? "toolHand" : k === "weed" ? "toolWeed" : "toolPest")}
+                    </button>
+                  ))}
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="field">
@@ -234,7 +283,7 @@ export function App() {
               </span>
               <span className="locked-title">{t("lockedTitle")}</span>
               <span className="locked-cost">
-                <Coin size={16} /> {num(next.price)}
+                <Coin size={14} /> {num(next.price)}
               </span>
               <span className="locked-cost">{t("lockedLevel", { level: next.level })}</span>
             </button>
@@ -246,29 +295,31 @@ export function App() {
 
       <Basket game={game} />
 
-      <nav className="dock" aria-label="dock">
-        <button className={`dock-btn ${drawer === "seeds" ? "on" : ""}`} onClick={() => setDrawer(drawer === "seeds" ? undefined : "seeds")}>
-          <CropIcon id={seed} size={34} />
-          <span>{t("dockSeeds")}</span>
-        </button>
-        <button className={`dock-btn ${drawer === "barn" ? "on" : ""}`} onClick={() => setDrawer(drawer === "barn" ? undefined : "barn")}>
-          <BarnIcon />
-          <span>{t("dockBarn")}</span>
-          {mine.fruits.some(Boolean) && <b className="dot">{num(mine.fruits.reduce((a, b) => a + b, 0))}</b>}
-        </button>
-        <button
-          className={`dock-btn ${drawer === "neighbours" ? "on" : ""}`}
-          onClick={() => setDrawer(drawer === "neighbours" ? undefined : "neighbours")}
-        >
-          <FenceIcon />
-          <span>{t("dockNeighbours")}</span>
-          {game.farms.length > 1 && <b className="dot">{game.farms.length - 1}</b>}
-        </button>
-        <button className={`dock-btn ${drawer === "rules" ? "on" : ""}`} onClick={() => setDrawer(drawer === "rules" ? undefined : "rules")}>
-          <BookIcon />
-          <span>{t("dockRules")}</span>
-        </button>
-      </nav>
+      <div className="dock-wrap">
+        <nav className="dock" aria-label="dock">
+          <button className={`dock-btn ${drawer === "seeds" ? "on" : ""}`} onClick={() => setDrawer(drawer === "seeds" ? undefined : "seeds")}>
+            <CropIcon id={seed} size={34} />
+            <span>{t("dockSeeds")}</span>
+          </button>
+          <button className={`dock-btn ${drawer === "barn" ? "on" : ""}`} onClick={() => setDrawer(drawer === "barn" ? undefined : "barn")}>
+            <BarnIcon size={34} />
+            <span>{t("dockBarn")}</span>
+            {mine.fruits.some(Boolean) && <b className="dot">{num(mine.fruits.reduce((a, b) => a + b, 0))}</b>}
+          </button>
+          <button
+            className={`dock-btn ${drawer === "neighbours" ? "on" : ""}`}
+            onClick={() => setDrawer(drawer === "neighbours" ? undefined : "neighbours")}
+          >
+            <FenceIcon size={34} />
+            <span>{t("dockNeighbours")}</span>
+            {game.farms.length > 1 && <b className="dot">{game.farms.length - 1}</b>}
+          </button>
+          <button className={`dock-btn ${drawer === "rules" ? "on" : ""}`} onClick={() => setDrawer(drawer === "rules" ? undefined : "rules")}>
+            <BookIcon size={34} />
+            <span>{t("dockRules")}</span>
+          </button>
+        </nav>
+      </div>
 
       {drawer && (
         <aside className="drawer" aria-label="panel">
@@ -335,19 +386,16 @@ function Shell({ game, farm, children }: { game: Game; farm?: FarmView; children
       <header className="hud">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 48 48" width="30" height="30">
-              <rect width="48" height="48" rx="12" fill="#7db249" stroke="#22331f" strokeWidth="3" />
-              <path
-                d="M24 40V22M24 26c-9 1-14-4-15-11 8-1 14 3 15 11zM24 26c9 1 14-4 15-11-8-1-14 3-15 11z"
-                fill="#fffdf4"
-                stroke="#22331f"
-                strokeWidth="2.4"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <BrandLogo size={34} />
           </span>
-          <span className="brand-name">{t("brand")}</span>
-          <span className="brand-sub">{t("brandSub", { network: t(game.network.id === "devnet" ? "netDevnet" : game.network.id === "testnet" ? "netTestnet" : "netMainnet") })}</span>
+          <span className="brand-text">
+            <span className="brand-name">{t("brand")}</span>
+            <span className="brand-sub">
+              {t("brandSub", {
+                network: t(game.network.id === "devnet" ? "netDevnet" : game.network.id === "testnet" ? "netTestnet" : "netMainnet"),
+              })}
+            </span>
+          </span>
         </div>
         {farm && (
           <div className="stats">
@@ -487,7 +535,7 @@ function Claim({ game }: { game: Game }) {
       </label>
       <input id="farm-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("myFarmFallback")} maxLength={18} autoFocus />
       {noWallet ? (
-        <button className="btn big" onClick={game.wallet.open}>
+        <button type="button" className="btn big" onClick={game.wallet.open}>
           {t("connectWallet")}
         </button>
       ) : (
@@ -537,6 +585,10 @@ function PlotTile({
   const p = plot as PlotView;
   const stage = stageOf(p, now);
   const dry = !!p.problems[KIND_DRY];
+  const growingPct =
+    !p.withered && !p.pending && !p.ripe
+      ? Math.max(4, Math.min(100, Math.round(((now - p.plantedAt) / Math.max(1, p.duration)) * 100)))
+      : undefined;
   const status = p.withered
     ? t("withered")
     : p.pending
@@ -559,15 +611,22 @@ function PlotTile({
       <span className="soil" />
       <Plant crop={p.crop} stage={stage} />
       <span className="pests">
-        {!!p.problems[KIND_WEED] && <Weed />}
-        {!!p.problems[KIND_PEST] && <Bug />}
-        {dry && <Drop />}
+        {!!p.problems[KIND_WEED] && <Weed size={26} />}
+        {!!p.problems[KIND_PEST] && <Bug size={26} />}
+        {dry && <Drop size={26} />}
       </span>
       {p.stolen > 0 && <span className="stolen">{t("stolen", { n: p.stolen })}</span>}
       <span className={`tag ${p.ripe ? "ripe" : ""}`}>
         <b>{cropName(p.crop)}</b>
-        {status}
-        {p.season > 0 && !p.withered && <i>{t("season", { n: p.season + 1 })}</i>}
+        <span className="tag-meta">
+          {status}
+          {p.season > 0 && !p.withered && <i>{t("season", { n: p.season + 1 })}</i>}
+        </span>
+        {growingPct !== undefined && (
+          <span className="tag-progress" aria-hidden="true">
+            <span style={{ width: `${growingPct}%` }} />
+          </span>
+        )}
       </span>
     </button>
   );
@@ -591,17 +650,16 @@ function Kennel({
   return (
     <div className="kennel">
       <span className={`doghouse ${awake ? "awake" : ""}`} aria-hidden="true">
-        <svg viewBox="0 0 84 78" width="72" height="67">
-          <path d="M8 34L42 6l34 28" fill="#e2533f" stroke="#22331f" strokeWidth="3" strokeLinejoin="round" />
-          <rect x="14" y="32" width="56" height="40" rx="4" fill="#e8c38d" stroke="#22331f" strokeWidth="3" />
-          <path d="M30 72V52c0-7 5-12 12-12s12 5 12 12v20" fill="#6e4424" stroke="#22331f" strokeWidth="3" />
-        </svg>
+        <DoghouseArt awake={awake} />
         <span className="doghouse-dog">
-          <Dog awake={awake} size={46} />
+          <Dog awake={awake} size={48} />
         </span>
       </span>
       <div className="kennel-text">
-        <b>{awake ? t("dogAwake", { time: span(farm.dogUntil - game.now) }) : t("dogHungry")}</b>
+        <b className="kennel-status">
+          <i className={`status-dot ${awake ? "on" : "off"}`} aria-hidden="true" />
+          {awake ? t("dogAwake", { time: span(farm.dogUntil - game.now) }) : t("dogHungry")}
+        </b>
         <span>
           {away
             ? awake
@@ -614,6 +672,7 @@ function Kennel({
       </div>
       {!away && (
         <button className="btn small" disabled={!can || farm.gold < catalog.dogFoodPrice} onClick={onFeed}>
+          <BoneIcon size={16} />
           {t("feedDog")} <Coin size={14} /> {catalog.dogFoodPrice}
         </button>
       )}
@@ -660,7 +719,7 @@ function Seeds({ catalog, farm, seed, pick }: { catalog: Catalog; farm: FarmView
           return (
             <li key={c.id}>
               <button className={`row ${seed === c.id ? "on" : ""}`} disabled={locked} aria-pressed={seed === c.id} onClick={() => pick(c.id)}>
-                <CropIcon id={c.id} size={44} />
+                <CropIcon id={c.id} size={46} />
                 <span className="row-main">
                   <b>{cropName(c.id)}</b>
                   <span>
@@ -675,9 +734,9 @@ function Seeds({ catalog, farm, seed, pick }: { catalog: Catalog; farm: FarmView
                   ) : (
                     <>
                       <span className="price">
-                        <Coin size={14} /> {num(c.seedPrice)}
+                        <Coin size={15} /> {num(c.seedPrice)}
                       </span>
-                      {farm.seeds[c.id - 1] > 0 && <i>{t("inBag", { n: farm.seeds[c.id - 1] })}</i>}
+                      {farm.seeds[c.id - 1] > 0 && <i className="bag-badge">{t("inBag", { n: farm.seeds[c.id - 1] })}</i>}
                     </>
                   )}
                 </span>
@@ -693,6 +752,7 @@ function Seeds({ catalog, farm, seed, pick }: { catalog: Catalog; farm: FarmView
 function Barn({ catalog, farm, sell }: { catalog: Catalog; farm: FarmView; sell: (crop: number, count: number) => void }) {
   const stock = catalog.crops.filter((c) => farm.fruits[c.id - 1] > 0);
   const worth = stock.reduce((sum, c) => sum + c.sellPrice * farm.fruits[c.id - 1], 0);
+  const totalCount = stock.reduce((sum, c) => sum + farm.fruits[c.id - 1], 0);
   return (
     <>
       <h2>{t("dockBarn")}</h2>
@@ -700,12 +760,18 @@ function Barn({ catalog, farm, sell }: { catalog: Catalog; farm: FarmView; sell:
         <p className="drawer-note">{t("barnNote")}</p>
       ) : (
         <>
+          <div className="barn-summary">
+            <span>×{num(totalCount)}</span>
+            <strong>
+              <Coin size={18} /> {num(worth)}
+            </strong>
+          </div>
           <ul className="list">
             {stock.map((c) => {
               const n = farm.fruits[c.id - 1];
               return (
                 <li key={c.id} className="row static">
-                  <CropIcon id={c.id} size={44} />
+                  <CropIcon id={c.id} size={46} />
                   <span className="row-main">
                     <b>
                       {cropName(c.id)} ×{num(n)}
@@ -793,16 +859,18 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
       <h2>{t("dockRules")}</h2>
       <div className="prose">
         <p>{t("rulesIntro")}</p>
-        <ul>
-          <li>{t("rulesTime", { time: span(unit), hours: catalog.hoursPerDay })}</li>
-          <li>{t("rulesPlantTime")}</li>
-          <li>{t("rulesProblems", { percent: catalog.problemPenaltyPercent })}</li>
-          <li>{t("rulesSteal")}</li>
-          <li>{t("rulesHelp", { exp: catalog.expHelp, n: catalog.helpExpPerDay })}</li>
-          <li>{t("rulesMischief", { n: catalog.mischiefPerDay })}</li>
-          <li>{t("rulesDog", { level: catalog.dogLevel, price: catalog.dogFoodPrice, percent: catalog.dogBlockPercent })}</li>
-          <li>{t("rulesVisit")}</li>
-        </ul>
+        <div className="rules-card">
+          <ul>
+            <li>{t("rulesTime", { time: span(unit), hours: catalog.hoursPerDay })}</li>
+            <li>{t("rulesPlantTime")}</li>
+            <li>{t("rulesProblems", { percent: catalog.problemPenaltyPercent })}</li>
+            <li>{t("rulesSteal")}</li>
+            <li>{t("rulesHelp", { exp: catalog.expHelp, n: catalog.helpExpPerDay })}</li>
+            <li>{t("rulesMischief", { n: catalog.mischiefPerDay })}</li>
+            <li>{t("rulesDog", { level: catalog.dogLevel, price: catalog.dogFoodPrice, percent: catalog.dogBlockPercent })}</li>
+            <li>{t("rulesVisit")}</li>
+          </ul>
+        </div>
         <p className="mono">
           {t("codeVersion")}
           <code>{d.codeHash}</code>
@@ -814,7 +882,7 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
         <p>{t("rulesClose")}</p>
         <p>
           {t("rulesAudit")}{" "}
-          <a href="https://github.com/tianlitao/qq-farm/blob/main/AUDIT.md" target="_blank" rel="noreferrer">
+          <a href="https://github.com/tianlitao/qq-farm/blob/main/AUDIT-fable-5.2.md" target="_blank" rel="noreferrer">
             {t("rulesAuditLink")}
           </a>
         </p>
@@ -825,23 +893,3 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
     </>
   );
 }
-
-const icon = { fill: "none", stroke: "#22331f", strokeWidth: 2.2, strokeLinejoin: "round" as const, strokeLinecap: "round" as const };
-const BarnIcon = () => (
-  <svg viewBox="0 0 36 36" width={34} height={34} aria-hidden="true">
-    <path d="M5 16l13-10 13 10v15H5z" {...icon} fill="#e2533f" />
-    <path d="M13 31V20h10v11M13 20l10 11M23 20L13 31" {...icon} fill="#fffdf4" />
-  </svg>
-);
-const FenceIcon = () => (
-  <svg viewBox="0 0 36 36" width={34} height={34} aria-hidden="true">
-    <path d="M6 31V12l4-5 4 5v19zM22 31V12l4-5 4 5v19z" {...icon} fill="#e8c38d" />
-    <path d="M14 16h8M14 25h8M2 16h4M2 25h4M30 16h4M30 25h4" {...icon} />
-  </svg>
-);
-const BookIcon = () => (
-  <svg viewBox="0 0 36 36" width={34} height={34} aria-hidden="true">
-    <path d="M18 9c-4-3-9-3-13-1v20c4-2 9-2 13 1 4-3 9-3 13-1V8c-4-2-9-2-13 1z" {...icon} fill="#fffdf4" />
-    <path d="M18 9v20" {...icon} />
-  </svg>
-);

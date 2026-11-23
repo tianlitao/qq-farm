@@ -1,4 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <rect width="48" height="48" rx="12" fill="#7db249"/>
-  <path d="M24 40V22M24 26c-9 1-14-4-15-11 8-1 14 3 15 11zM24 26c9 1 14-4 15-11-8-1-14 3-15 11z" fill="#fffdf4" stroke="#22331f" stroke-width="2.4" stroke-linejoin="round"/>
+  <rect x="2" y="2" width="44" height="44" rx="13" fill="#6aa845" stroke="#35261a" stroke-width="2.5"/>
+  <rect x="5" y="5" width="38" height="19" rx="9" fill="#8bc95a" opacity="0.55"/>
+  <path d="M4 35c7-5 33-5 40 0v6a7 7 0 0 1-7 7H11a7 7 0 0 1-7-7v-6z" fill="#8d5b34"/>
+  <path d="M4 35c7-5 33-5 40 0" fill="none" stroke="#35261a" stroke-width="2.2"/>
+  <circle cx="24" cy="21" r="10" fill="#fde386" opacity="0.35"/>
+  <path d="M24 34V19" fill="none" stroke="#35261a" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M24 34V19" fill="none" stroke="#fdf8ea" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M24 23c-9.5 1.2-14.5-4-15-11.5 8.5-.8 14 3.5 15 11.5z" fill="#fffaf0" stroke="#35261a" stroke-width="2.3" stroke-linejoin="round"/>
+  <path d="M24 23c9.5 1.2 14.5-4 15-11.5-8.5-.8-14 3.5-15 11.5z" fill="#e7f5c4" stroke="#35261a" stroke-width="2.3" stroke-linejoin="round"/>
 </svg>
