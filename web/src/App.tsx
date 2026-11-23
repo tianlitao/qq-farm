@@ -854,9 +854,18 @@ function Neighbours({ game, go }: { game: Game; go: (id: string) => void }) {
   );
 }
 
+const DONATE_ADDRESS =
+  "ckb1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwgadtmejgy85pls6azlmwjefwxujy8nxsmqlpgd";
+
 function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askClose: () => void }) {
   const unit = game.chain!.unit;
   const d = game.chain!.deployment;
+  const copyDonate = () => {
+    navigator.clipboard
+      ?.writeText(DONATE_ADDRESS)
+      .then(() => game.toast("ok", t("copied")))
+      .catch(() => {});
+  };
   return (
     <>
       <h2>{t("dockRules")}</h2>
@@ -889,6 +898,15 @@ function Rules({ catalog, game, askClose }: { catalog: Catalog; game: Game; askC
             {t("rulesAuditLink")}
           </a>
         </p>
+        <div className="rules-card donate-card">
+          <h3>{t("donateTitle")}</h3>
+          <p>{t("donateNote")}</p>
+          <img className="donate-qr" src="/donate-qr.svg" alt={t("donateTitle")} width={156} height={156} />
+          <code className="donate-addr">{DONATE_ADDRESS}</code>
+          <button type="button" className="btn small" onClick={copyDonate}>
+            {t("copyAddress")}
+          </button>
+        </div>
         <button className="btn small danger" disabled={!!game.busy} onClick={askClose}>
           {t("closeBtn")}
         </button>

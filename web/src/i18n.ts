@@ -93,7 +93,7 @@ const zh: Record<string, string> = {
   reload: "重新连接",
 
   claimTitle: "开垦一块自己的地",
-  claimIntro: "农场是一个存在 CKB 链上的格子，之后的每一次播种、收获和串门都由链上合约按同一套规则验算。",
+  claimIntro: "农场是一个存在 CKB 链上的格子，之后的每一次播种、收获和串门都由链上合约按同一套规则验算，押在里面的 CKB 可以随时取回。",
   factDeposit: "≈332 CKB",
   factDepositNote: "占地押金，随时收回",
   factGold: "{gold} 金币",
@@ -215,6 +215,10 @@ const zh: Record<string, string> = {
   rulesAudit:
     "已汇总四份模型审计（Gemini 4 Neon、qwen4-max 四轮、Claude Fable 5.2、glm-5.3-flash，最新 2026-11-23）：源码审查 + CKB-VM 攻击探针 + 实链验证，69 个测试全过。审计发现的高危问题（小费关闭他人农场）及全部中危问题均已修复并上线，前端已禁止 OmniLock-ACP / ACP 地址开垦。模型审计，不等同第三方审计公司。",
   rulesAuditLink: "查看审计报告",
+  donateTitle: "捐赠支持",
+  donateNote: "喜欢这个链上小农场？欢迎扫描二维码或向下方 CKB 地址捐赠支持：",
+  copyAddress: "复制地址",
+  copied: "已复制捐赠地址",
 
   renameTitle: "给农场起个名字",
   renameBtn: "就叫这个",
@@ -324,7 +328,7 @@ const en: Record<string, string> = {
 
   claimTitle: "Claim a plot of your own",
   claimIntro:
-    "A farm is a cell on the CKB chain. Every later planting, harvest and visit is checked by the on-chain contract against one set of rules.",
+    "A farm is a cell on the CKB chain. Every later planting, harvest and visit is checked by the on-chain contract against one set of rules, and you can reclaim your CKB at any time.",
   factDeposit: "≈332 CKB",
   factDepositNote: "your deposit, reclaim any time",
   factGold: "{gold} gold",
@@ -445,6 +449,10 @@ const en: Record<string, string> = {
   rulesAudit:
     "Consolidated four model audits (Gemini 4 Neon; qwen4-max, four rounds; Claude Fable 5.2; glm-5.3-flash; latest 2026-11-23): source review, CKB-VM attack probes, and live-chain verification, 69 tests passing. The high-severity close issue and all medium-severity issues are fixed and live, and the frontend blocks OmniLock-ACP / ACP addresses from claiming. Model audits, not a third-party audit firm.",
   rulesAuditLink: "Read the audit report",
+  donateTitle: "Donate",
+  donateNote: "Enjoying this on-chain farm? Scan the QR code or send CKB to support it:",
+  copyAddress: "Copy address",
+  copied: "Donation address copied",
 
   renameTitle: "Name your farm",
   renameBtn: "That's the name",

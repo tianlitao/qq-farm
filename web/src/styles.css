@@ -1982,6 +1982,48 @@ button.row.on:hover:not(:disabled) {
   margin: 12px 0 14px;
 }
 
+.donate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.donate-card h3 {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+
+.donate-card p {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.donate-qr {
+  display: block;
+  width: 156px;
+  height: 156px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.donate-addr {
+  display: block;
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-all;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--paper);
+  border: 1px solid var(--paper-line);
+  color: var(--ink);
+  user-select: all;
+}
+
 .mono {
   font-size: 12px;
   font-weight: 600;
