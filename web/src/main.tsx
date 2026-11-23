@@ -5,6 +5,7 @@ import { App } from "./App";
 import { type NetworkId, NETWORKS, createClient } from "./chain/network";
 
 const NETWORK: NetworkId = (import.meta.env.VITE_NETWORK as NetworkId) || "devnet";
+const CLIENT = createClient(NETWORK);
 
 import "./styles.css";
 
@@ -13,12 +14,8 @@ createRoot(document.getElementById("root")!).render(
     <ccc.Provider
       name="垄上"
       locale="zh-Hans"
-      defaultClient={createClient(NETWORK)}
-      clientOptions={
-        NETWORK === "devnet"
-          ? [{ client: createClient(NETWORK), name: NETWORKS.devnet.name }]
-          : undefined
-      }
+      defaultClient={CLIENT}
+      clientOptions={[{ client: CLIENT, name: NETWORKS[NETWORK].name }]}
     >
       <App />
     </ccc.Provider>

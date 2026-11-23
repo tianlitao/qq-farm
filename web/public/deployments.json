@@ -26,5 +26,19 @@
     "codeScriptHash": "0x60a2616b11280b839537a6accd36c1fc09b5fe5959ee12becc3a56162200b3bd",
     "codeHash": "0x4e2dc6328519ad576cb9963f7693ae2a9b4ebc914c555bd5793975fd3a4055bf",
     "unit": 30
+  },
+  "mainnet": {
+    "version": 2,
+    "validator": {
+      "txHash": "0xa97335c213caf920e580e13488168da930d50ccee085af1c1c13e009135ff495",
+      "index": 0
+    },
+    "code": {
+      "txHash": "0xee0a27d9ccc317c7d4014c3e6683cb2a8d335d709d5afeb02939a4909772cebe",
+      "index": 0
+    },
+    "codeScriptHash": "0x578e1f832861bc0040beaf777182f82262aa58a21ae2135f6afb0cbdfcfbf12b",
+    "codeHash": "0x4e2dc6328519ad576cb9963f7693ae2a9b4ebc914c555bd5793975fd3a4055bf",
+    "unit": 3600
   }
 }

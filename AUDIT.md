@@ -21,13 +21,14 @@
 
 ### 1. 当前验证对象
 - **核心合约与规则**：`contracts/farm/src/main.rs`、`contracts/type-id/src/main.rs`、`crates/farm-core/src/{lib,crops}.rs`、`crates/farm-wasm/src/lib.rs`
-- **合约二进制（本地链 & 测试网均已升级上线）**：
+- **合约二进制（主网、测试网与本地链均已运行最新版本）**：
   - `build/farm`（52,008 字节）：blake2b-256 `0x4e2dc6328519ad576cb9963f7693ae2a9b4ebc914c555bd5793975fd3a4055bf` / sha256 `deb85f6f6a08fd98e5176e3e73010300d1e4be23813485dcf92f4fd3779567ab`
-    - 测试网升级交易：`0xcb92cb0103c87b76d7be2a7cb2010eb36074c021339cd6417b0c39a9dc454df5`（type script hash `0x0253fea2…9f775d` 不变）
-    - 本地链升级交易：`0xec7304f6fb35421b73a75bce3fa48c98c64df672fbef3d256bb0e54734ef0c7d`（type script hash `0x60a2616b…0b3bd` 不变）
-  - `web/src/chain/farm_wasm.wasm`（34,017 字节）：sha256 `b2d5eb508898717e6be68881cae0ceacbeefa7891d47883530d2737342363ec4`（已同步构建并发布至 Cloudflare Pages `ckb-farm.pages.dev`）
+    - **主网部署**：代码 cell `0xee0a27d9ccc317c7d4014c3e6683cb2a8d335d709d5afeb02939a4909772cebe:0`、校验器 `0xa97335c213caf920e580e13488168da930d50ccee085af1c1c13e009135ff495:0`（`codeScriptHash` `0x578e1f83…cfbf12b`，站点 `ckb-farm.pages.dev`）
+    - **测试网升级**：交易 `0xcb92cb0103c87b76d7be2a7cb2010eb36074c021339cd6417b0c39a9dc454df5`（`codeScriptHash` `0x0253fea2…9f775d` 不变，站点 `ckb-farm-testnet.pages.dev`）
+    - **本地链升级**：交易 `0xec7304f6fb35421b73a75bce3fa48c98c64df672fbef3d256bb0e54734ef0c7d`（`codeScriptHash` `0x60a2616b…0b3bd` 不变）
+  - `web/src/chain/farm_wasm.wasm`（34,017 字节）：sha256 `b2d5eb508898717e6be68881cae0ceacbeefa7891d47883530d2737342363ec4`
   - `build/type-id`（28,368 字节，未变）：blake2b-256 `0x3a353bb830b3bde3edacdc05ef9d209de35547230052c6b52cd1dd8a8a7e591c` / sha256 `e809f152889e000243366b375b53c392e9b912f897b7b63ca1ffd958764892cf`
-- **主网状态**：尚未部署。
+- **测试网真实钱包验证**：已在测试网使用真实浏览器钱包完成验证。
 - **测试基线**：`cargo test -p farm-tests` 全部 **69/69**（含新增 `tests/tests/audit_gemini.rs` 3 项回归测试）在真实 CKB-VM 中通过；`tsc --noEmit`（含前端与 `shutdown.ts`）通过；`detectUnsupportedOwnerLock` 三网 18 组用例实测通过。
 
 ### 2. 综合结论

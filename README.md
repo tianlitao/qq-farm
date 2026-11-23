@@ -2,7 +2,7 @@
 
 一个完全跑在 [Nervos CKB](https://www.nervos.org/) 上的种菜、偷菜游戏。开垦、播种、除草除虫浇水、收获、卖菜、扩地、养狗，以及去邻居地里摘菜、帮忙、放草放虫，全部由一份链上合约验算。没有服务器；存档和判定都在链上，当前规则下谁也不能单方面动你的农场。合约**可以由部署者公开升级**（见下文"升级与信任模型"）：升级换的是规则代码，type id 不变、每一次升级链上可查；但升级权是真实的权力，玩之前请读那一节。
 
-**已审计（四份模型审计汇总）**：统一基线见 [AUDIT.md](AUDIT.md)，原始报告包括 [AUDIT-gemini-4-neon.md](AUDIT-gemini-4-neon.md)（Gemini 4 Neon，2026-11-23 最新）、[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮）、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2）与 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)（glm-5.3-flash）。方法涵盖源码逐行审查 + 真实 CKB-VM 攻击探针 + 本地链/测试网实链验证；**69 个测试**在当前二进制上全部通过。审计发现的高危漏洞（小费关闭他人农场）及全部三项中危问题（历史区块头按天步进重置计数、同笔放草拔草零状态变化活性 DoS、`shutdown.ts` 跨 `unit` 漏检）**均已修复并在本地链与测试网上线**；ACP / OmniLock-ACP 强关风险（GN-01）已在官方前端禁止开垦缓解。核心遗留：部署钥匙仍是单把热钥匙、使坏上限按农场计（低危）。**没有部署到主网**；这些是模型审计，不等同第三方审计公司。
+**已审计（四份模型审计汇总）**：统一基线见 [AUDIT.md](AUDIT.md)，原始报告包括 [AUDIT-gemini-4-neon.md](AUDIT-gemini-4-neon.md)（Gemini 4 Neon，2026-11-23 最新）、[AUDIT-qwen4-max.md](AUDIT-qwen4-max.md)（qwen4-max，四轮）、[AUDIT-fable-5.2.md](AUDIT-fable-5.2.md)（Claude Fable 5.2）与 [AUDIT-glm-5.3-flash.md](AUDIT-glm-5.3-flash.md)（glm-5.3-flash）。方法涵盖源码逐行审查 + 真实 CKB-VM 攻击探针 + 本地链/测试网实链验证；**69 个测试**在当前二进制上全部通过。审计发现的高危漏洞（小费关闭他人农场）及全部三项中危问题（历史区块头按天步进重置计数、同笔放草拔草零状态变化活性 DoS、`shutdown.ts` 跨 `unit` 漏检）**均已修复并上线**；ACP / OmniLock-ACP 强关风险（GN-01）已在官方前端禁止开垦缓解。已部署至 **CKB 主网**（`https://ckb-farm.pages.dev`）与 **CKB 测试网**（`https://ckb-farm-testnet.pages.dev`）；这些是模型审计，不等同第三方审计公司。
 
 玩法是经典的社交农场那一类，但这是一个原创游戏：名字、美术、数值和界面都是这个项目自己的，没有使用任何现成游戏的素材。
 
@@ -131,7 +131,12 @@ npm run build                     # 类型检查并打包
 
 ### 网络
 
-`VITE_NETWORK`（见 `.env.example`）：`devnet` 本地链 / `testnet` 测试网 / `mainnet` 主网。主网配置已就位（RPC、浏览器、headerLag），合约尚未部署到主网——部署与升级脚本对主网要求显式 `--keyfile` 加 `--yes` 双重确认，真金白银，请先读完审计报告。
+`VITE_NETWORK`（见 `.env.example`）：`devnet` 本地链 / `testnet` 测试网 / `mainnet` 主网。主网与测试网均已部署：
+
+- **主网站点**：https://ckb-farm.pages.dev （代码 cell `0xee0a27d9ccc317c7d4014c3e6683cb2a8d335d709d5afeb02939a4909772cebe`，校验器 `0xa97335c213caf920e580e13488168da930d50ccee085af1c1c13e009135ff495`，`codeScriptHash` `0x578e1f832861bc0040beaf777182f82262aa58a21ae2135f6afb0cbdfcfbf12b`，版本哈希 `0x4e2dc6328519ad576cb9963f7693ae2a9b4ebc914c555bd5793975fd3a4055bf`，时速 3600 秒/小时，两个部署 cell 均由部署者锁看守可回收）
+- **测试网站点**：https://ckb-farm-testnet.pages.dev （见下文）
+
+部署与升级脚本对主网要求显式 `--keyfile` 加 `--yes` 双重确认。
 
 ### 测试网
 
